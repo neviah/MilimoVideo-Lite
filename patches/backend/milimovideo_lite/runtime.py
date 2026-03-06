@@ -1,0 +1,164 @@
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any, Dict, Optional
+
+import config
+
+from .model_manager import ensure_models
+from .interfaces import PipelineRouter
+from .pipelines import HighVRAMPipeline, LowVRAMPipeline
+from .vram import get_total_vram_gb, get_vram_mode, resolve_runtime_mode
+
+logger = logging.getLogger(__name__)
+
+
+_BOOTSTRAPPED = False
+_MODE_CACHE = None
+_MODELS_CACHE: Dict[str, str] = {}
+
+
+class LitePipelineRouter(PipelineRouter):
+    def __init__(self, mode: str, resolved_models: Dict[str, str]):
+        self._mode = mode
+        self._resolved_models = resolved_models
+        self._high = HighVRAMPipeline(resolved_models=resolved_models)
+        low_mode = "cpu" if mode == "cpu" else "low"
+        self._low = LowVRAMPipeline(resolved_models=resolved_models, mode=low_mode)
+
+    def current_mode(self) -> str:
+        return self._mode
+
+    def video_pipeline(self):
+        return self._high if self._mode == "high" else self._low
+
+    def image_pipeline(self):
+        return self._high if self._mode == "high" else self._low
+
+    def segmentation_pipeline(self):
+        return self._high if self._mode == "high" else self._low
+
+
+def _pick_pipeline(mode: str):
+    return LitePipelineRouter(mode, _MODELS_CACHE)
+
+
+def bootstrap_lite_runtime() -> None:
+    global _BOOTSTRAPPED, _MODE_CACHE, _MODELS_CACHE
+    if _BOOTSTRAPPED:
+        return
+
+    configured = get_vram_mode()
+    effective = resolve_runtime_mode()
+    _MODE_CACHE = effective
+
+    logger.info(
+        "MilimoVideo-Lite runtime mode configured=%s effective=%s vram_gb=%s",
+        configured,
+        effective,
+        get_total_vram_gb(),
+    )
+
+    models_root = os.path.join(config.BACKEND_DIR, "models")
+    try:
+        if os.environ.get("MILIMO_SKIP_MODEL_DOWNLOAD", "0") == "1":
+            logger.warning("MILIMO_SKIP_MODEL_DOWNLOAD=1 set, skipping model download")
+            _MODELS_CACHE = {}
+        else:
+            _MODELS_CACHE = ensure_models(models_root, mode=effective)
+    except Exception as exc:
+        logger.warning("Model auto-download encountered an issue: %s", exc)
+        _MODELS_CACHE = {}
+
+    _BOOTSTRAPPED = True
+
+
+def get_router() -> LitePipelineRouter:
+    bootstrap_lite_runtime()
+    mode = _MODE_CACHE or resolve_runtime_mode()
+    return _pick_pipeline(mode)
+
+
+def describe_runtime() -> Dict[str, Any]:
+    bootstrap_lite_runtime()
+    mode = _MODE_CACHE or resolve_runtime_mode()
+    return {
+        "configured_mode": get_vram_mode(),
+        "effective_mode": mode,
+        "vram_gb": get_total_vram_gb(),
+        "models": _MODELS_CACHE,
+    }
+
+
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def adjust_video_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
+    bootstrap_lite_runtime()
+    tuned = dict(params)
+
+    router = get_router()
+    mode = router.current_mode()
+    if mode == "high":
+        return tuned
+
+    planner = router.video_pipeline()
+    result = planner.generate_video(tuned.get("prompt", ""), tuned)
+    tuned.update(result.get("settings", {}))
+
+    # Keep endpoint schema untouched and constrain backend resource profile only.
+    tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 40), 40), 28)
+    tuned["width"] = min(_safe_int(tuned.get("width", 768), 768), 960)
+    tuned["height"] = min(_safe_int(tuned.get("height", 512), 512), 544)
+
+    # Temporal chunking and latent tiling are injected as planner metadata.
+    chunk_size = _safe_int(tuned.get("temporal_chunk_size", 6), 6)
+    frames = _safe_int(tuned.get("num_frames", 121), 121)
+    tuned["num_frames"] = max(chunk_size, min(frames, 121))
+
+    if mode == "cpu":
+        tuned["device"] = "cpu"
+        tuned["enable_cpu_offload"] = True
+
+    return tuned
+
+
+def adjust_image_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
+    bootstrap_lite_runtime()
+    tuned = dict(params)
+
+    router = get_router()
+    mode = router.current_mode()
+    if mode == "high":
+        return tuned
+
+    planner = router.image_pipeline()
+    result = planner.generate_image(tuned.get("prompt", ""), tuned)
+    tuned.update(result.get("settings", {}))
+    tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 25), 25), 20)
+    tuned["enable_ae"] = True
+    tuned["enable_true_cfg"] = False
+
+    return tuned
+
+
+def get_sam_runtime_overrides() -> Dict[str, Any]:
+    router = get_router()
+    plan = router.segmentation_pipeline().plan_segmentation({})
+    return dict(plan.extra)
+
+
+def before_video_task(job_id: str, params: Dict[str, Any]) -> None:
+    logger.info("MilimoVideo-Lite video task mode=%s job=%s", (_MODE_CACHE or resolve_runtime_mode()), job_id)
+    windows = params.get("low_vram_temporal_windows")
+    if windows:
+        logger.info("Low-VRAM temporal windows=%s", len(windows))
+
+
+def before_image_task(job_id: str, params: Dict[str, Any]) -> None:
+    logger.info("MilimoVideo-Lite image task mode=%s job=%s", (_MODE_CACHE or resolve_runtime_mode()), job_id)

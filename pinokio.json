@@ -1,0 +1,8 @@
+{
+  "version": "5.0",
+  "name": "MilimoVideo-Lite",
+  "title": "MilimoVideo-Lite",
+  "description": "Pinokio wrapper for MilimoVideo with automatic VRAM-aware low-VRAM backend mode.",
+  "icon": "icon.png",
+  "platform": "*"
+}

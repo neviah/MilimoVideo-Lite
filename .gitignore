@@ -1,0 +1,36 @@
+# Local Python environments
+.venv/
+venv/
+
+# Pinokio runtime data
+sandbox/
+
+# Local upstream clone used for testing (not source)
+upstream/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Build/test artifacts
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Temp scratch files used during debugging
+.tmp*
+*.tmp
+
+# Logs
+*.log
+
+# Node artifacts
+node_modules/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
