@@ -19,6 +19,12 @@ def patch_once(path: Path, needle: str, inject: str) -> None:
     path.write_text(text.replace(needle, needle + inject), encoding="utf-8")
 
 
+def remove_text(path: Path, target: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if target in text:
+        path.write_text(text.replace(target, ""), encoding="utf-8")
+
+
 def patch_video_task(backend_dir: Path) -> None:
     file_path = backend_dir / "tasks" / "video.py"
     patch_once(
@@ -62,18 +68,22 @@ def patch_server_startup(backend_dir: Path) -> None:
     patch_once(
         file_path,
         "from events import event_manager\n",
-        "from milimovideo_lite.runtime import bootstrap_lite_runtime, describe_runtime\nfrom milimovideo_lite.pipelines import HighVRAMPipeline, LowVRAMPipeline\n",
+        "from milimovideo_lite.runtime import bootstrap_lite_runtime, describe_runtime\n",
     )
     patch_once(
         file_path,
         "logger = logging.getLogger(__name__)\n",
-        "logger.info(\"MilimoVideo-Lite runtime hook loaded\")\n_ = (HighVRAMPipeline, LowVRAMPipeline)\n",
+        "logger.info(\"MilimoVideo-Lite runtime hook loaded\")\n",
     )
     patch_once(
         file_path,
         "    init_db()\n",
         "    bootstrap_lite_runtime()\n    logger.info(f\"MilimoVideo-Lite runtime: {describe_runtime()}\")\n",
     )
+
+    # Cleanup for older buggy injections that referenced symbols before import.
+    remove_text(file_path, "_ = (HighVRAMPipeline, LowVRAMPipeline)\n")
+    remove_text(file_path, "from milimovideo_lite.pipelines import HighVRAMPipeline, LowVRAMPipeline\n")
 
 
 def patch_sam_startup(project_root: Path) -> None:
