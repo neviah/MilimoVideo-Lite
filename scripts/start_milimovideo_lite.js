@@ -80,17 +80,26 @@ backend.stdout.pipe(backendLog);
 backend.stderr.pipe(backendLog);
 
 const frontendEnv = { ...process.env, BROWSER: "none" };
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-const frontend = spawn(
-  npmCmd,
-  ["exec", "vite", "--", "--host", "127.0.0.1", "--port", "5173"],
-  {
-    cwd: webDir,
-    env: frontendEnv,
-    stdio: ["inherit", "pipe", "pipe"],
-    windowsHide: true,
-  }
-);
+const frontend = process.platform === "win32"
+  ? spawn(
+      "cmd.exe",
+      ["/d", "/s", "/c", "npm exec vite -- --host 127.0.0.1 --port 5173"],
+      {
+        cwd: webDir,
+        env: frontendEnv,
+        stdio: ["inherit", "pipe", "pipe"],
+        windowsHide: true,
+      }
+    )
+  : spawn(
+      "npm",
+      ["exec", "vite", "--", "--host", "127.0.0.1", "--port", "5173"],
+      {
+        cwd: webDir,
+        env: frontendEnv,
+        stdio: ["inherit", "pipe", "pipe"],
+      }
+    );
 
 const frontendLog = fs.createWriteStream(path.join(logDir, "frontend.log"), { flags: "a" });
 frontend.stdout.pipe(process.stdout);
