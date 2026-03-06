@@ -11,11 +11,16 @@ if (!fs.existsSync(path.join(backendDir, "server.py"))) {
   throw new Error("Missing backend/server.py. Install first.");
 }
 
+if (!fs.existsSync(webDir)) {
+  throw new Error(`Missing web-app folder at ${webDir}. Re-run install.js.`);
+}
+
 fs.mkdirSync(logDir, { recursive: true });
 
-const py = process.platform === "win32"
+const pyCandidate = process.platform === "win32"
   ? path.join(__dirname, "..", "sandbox", "venv", "Scripts", "python.exe")
   : path.join(__dirname, "..", "sandbox", "venv", "bin", "python");
+const py = fs.existsSync(pyCandidate) ? pyCandidate : "python";
 
 const backendEnv = {
   ...process.env,
@@ -28,6 +33,7 @@ const backend = spawn(py, ["server.py"], {
   cwd: backendDir,
   env: backendEnv,
   stdio: ["inherit", "pipe", "pipe"],
+  windowsHide: true,
 });
 
 const backendLog = fs.createWriteStream(path.join(logDir, "backend.log"), { flags: "a" });
@@ -36,12 +42,23 @@ backend.stderr.pipe(process.stderr);
 backend.stdout.pipe(backendLog);
 backend.stderr.pipe(backendLog);
 
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-const frontend = spawn(npmCmd, ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"], {
-  cwd: webDir,
-  env: { ...process.env, BROWSER: "none" },
-  stdio: ["inherit", "pipe", "pipe"],
-});
+const frontendEnv = { ...process.env, BROWSER: "none" };
+const frontend = process.platform === "win32"
+  ? spawn(
+      "cmd.exe",
+      ["/d", "/s", "/c", "npm run dev -- --host 127.0.0.1 --port 5173"],
+      {
+        cwd: webDir,
+        env: frontendEnv,
+        stdio: ["inherit", "pipe", "pipe"],
+        windowsHide: true,
+      }
+    )
+  : spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"], {
+      cwd: webDir,
+      env: frontendEnv,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
 
 const frontendLog = fs.createWriteStream(path.join(logDir, "frontend.log"), { flags: "a" });
 frontend.stdout.pipe(process.stdout);
@@ -64,10 +81,22 @@ backend.on("exit", (code) => {
   process.exit(code || 0);
 });
 
+backend.on("error", (err) => {
+  console.error("Failed to spawn backend process:", err);
+  shutdown();
+  process.exit(1);
+});
+
 frontend.on("exit", (code) => {
   console.log(`frontend exited with code ${code}`);
   shutdown();
   process.exit(code || 0);
+});
+
+frontend.on("error", (err) => {
+  console.error("Failed to spawn frontend process:", err);
+  shutdown();
+  process.exit(1);
 });
 
 process.on("SIGINT", shutdown);
