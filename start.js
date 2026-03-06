@@ -24,7 +24,6 @@ module.exports = {
         message: [
           "git pull --ff-only origin main",
           "git rev-parse --short HEAD",
-          "npm --prefix sandbox/workspace/milimovideo/web-app install --include=dev --no-audit --no-fund",
           "node scripts/start_milimovideo_lite.js"
         ]
       }
