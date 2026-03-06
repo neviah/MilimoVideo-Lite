@@ -25,13 +25,13 @@ function ensureFrontendDeps() {
 
   console.log("Installing frontend dependencies (missing vite binary)...");
   const result = process.platform === "win32"
-    ? spawnSync("cmd.exe", ["/d", "/s", "/c", "npm install"], {
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", "npm install --include=dev"], {
         cwd: webDir,
         env: process.env,
         stdio: "inherit",
         windowsHide: true,
       })
-    : spawnSync("npm", ["install"], {
+    : spawnSync("npm", ["install", "--include=dev"], {
         cwd: webDir,
         env: process.env,
         stdio: "inherit",
@@ -39,6 +39,10 @@ function ensureFrontendDeps() {
 
   if (result.status !== 0) {
     throw new Error(`npm install failed with exit code ${result.status}`);
+  }
+
+  if (!fs.existsSync(viteCmd)) {
+    throw new Error("Frontend dependencies installed but vite binary is still missing.");
   }
 }
 
