@@ -75,13 +75,46 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
     inject = (
         "            if self.device == \"cpu\":\n"
         "                # CPU-safe fallback: avoid default FP8 checkpoint which requires GPU/XPU.\n"
-        "                cpu_qwen = os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B-Instruct\")\n"
+        "                cpu_qwen = os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\")\n"
         "                cpu_tok = os.environ.get(\"MILIMO_QWEN3_CPU_TOKENIZER\", cpu_qwen)\n"
         "                os.environ.setdefault(\"QWEN3_8B_PATH\", cpu_qwen)\n"
         "                os.environ.setdefault(\"QWEN3_8B_TOKENIZER_PATH\", cpu_tok)\n"
         "                logger.warning(\"CUDA not available for Flux text encoder. Using non-FP8 CPU fallback model.\")\n"
     )
     patch_once(file_path, needle, inject)
+
+    # Add resilient retry chain around text encoder load for CPU fallback mode.
+    load_line = "            self.text_encoder = load_text_encoder(model_name, device=self.device)\n"
+    if load_line in file_path.read_text(encoding="utf-8"):
+        retry_block = (
+            "            try:\n"
+            "                self.text_encoder = load_text_encoder(model_name, device=self.device)\n"
+            "            except Exception as text_exc:\n"
+            "                if self.device != \"cpu\":\n"
+            "                    raise\n"
+            "                logger.warning(f\"Primary CPU text encoder failed: {text_exc}\")\n"
+            "                fallback_chain = [\n"
+            "                    os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\"),\n"
+            "                    \"Qwen/Qwen3-8B-Base\",\n"
+            "                    \"Qwen/Qwen2.5-7B-Instruct\",\n"
+            "                ]\n"
+            "                loaded = False\n"
+            "                for fb in fallback_chain:\n"
+            "                    if not fb:\n"
+            "                        continue\n"
+            "                    os.environ[\"QWEN3_8B_PATH\"] = fb\n"
+            "                    os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = fb\n"
+            "                    logger.warning(f\"Retrying CPU text encoder with fallback model: {fb}\")\n"
+            "                    try:\n"
+            "                        self.text_encoder = load_text_encoder(model_name, device=self.device)\n"
+            "                        loaded = True\n"
+            "                        break\n"
+            "                    except Exception as fb_exc:\n"
+            "                        logger.warning(f\"CPU fallback model failed ({fb}): {fb_exc}\")\n"
+            "                if not loaded:\n"
+            "                    raise\n"
+        )
+        patch_once(file_path, load_line, retry_block)
 
 
 def patch_server_startup(backend_dir: Path) -> None:
