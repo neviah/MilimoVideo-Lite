@@ -32,6 +32,8 @@ module.exports = {
           "python -m pip install -e sandbox/workspace/milimovideo/LTX-2/packages/ltx-pipelines",
           "python -m pip install -e sandbox/workspace/milimovideo/flux2",
           "python -m pip install -r sandbox/workspace/milimovideo/backend/requirements.txt",
+          "python -m pip install --upgrade --index-url https://download.pytorch.org/whl/cu121 torch torchvision torchaudio || echo CUDA torch install skipped",
+          "python -c \"import torch; print('torch', torch.__version__, 'cuda_available', torch.cuda.is_available())\"",
           "python -m pip install xformers bitsandbytes --extra-index-url https://download.pytorch.org/whl/cu121 || echo Optional xformers/bitsandbytes install skipped",
           "python -m pip install flash-attn || echo Optional flash-attn install skipped",
           "python -m pip install llama-cpp-python || echo Optional llama-cpp-python install skipped",

@@ -63,6 +63,27 @@ def patch_image_task(backend_dir: Path) -> None:
     )
 
 
+def patch_flux_wrapper(backend_dir: Path) -> None:
+    file_path = backend_dir / "models" / "flux_wrapper.py"
+    if not file_path.exists():
+        return
+
+    needle = (
+        "            if os.path.exists(qwen_tokenizer_path):\n"
+        "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = qwen_tokenizer_path\n"
+    )
+    inject = (
+        "            if self.device == \"cpu\":\n"
+        "                # CPU-safe fallback: avoid default FP8 checkpoint which requires GPU/XPU.\n"
+        "                cpu_qwen = os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B-Instruct\")\n"
+        "                cpu_tok = os.environ.get(\"MILIMO_QWEN3_CPU_TOKENIZER\", cpu_qwen)\n"
+        "                os.environ.setdefault(\"QWEN3_8B_PATH\", cpu_qwen)\n"
+        "                os.environ.setdefault(\"QWEN3_8B_TOKENIZER_PATH\", cpu_tok)\n"
+        "                logger.warning(\"CUDA not available for Flux text encoder. Using non-FP8 CPU fallback model.\")\n"
+    )
+    patch_once(file_path, needle, inject)
+
+
 def patch_server_startup(backend_dir: Path) -> None:
     file_path = backend_dir / "server.py"
     patch_once(
@@ -119,6 +140,7 @@ def main() -> None:
 
     patch_video_task(backend_dir)
     patch_image_task(backend_dir)
+    patch_flux_wrapper(backend_dir)
     patch_server_startup(backend_dir)
     patch_sam_startup(project_root)
 
