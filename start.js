@@ -22,6 +22,8 @@ module.exports = {
       params: {
         venv: "sandbox/venv",
         message: [
+          "git pull --ff-only",
+          "git rev-parse --short HEAD",
           "node scripts/start_milimovideo_lite.js"
         ]
       }
