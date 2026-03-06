@@ -97,6 +97,7 @@ Model source defaults are configurable via environment variables:
 - `MILIMO_LTX2_GGUF_Q6_REPO`, `MILIMO_LTX2_GGUF_Q6_FILE`, `MILIMO_LTX2_GGUF_Q6_SHA256`
 - `MILIMO_FLUX2_Q4_REPO`, `MILIMO_FLUX2_Q4_FILE`, `MILIMO_FLUX2_Q4_SHA256`
 - `MILIMO_FLUX2_Q8_REPO`, `MILIMO_FLUX2_Q8_FILE`, `MILIMO_FLUX2_Q8_SHA256`
+- `MILIMO_FLUX2_AE_REPO`, `MILIMO_FLUX2_AE_FILE`, `MILIMO_FLUX2_AE_SHA256`
 - `MILIMO_SAM3_REPO`, `MILIMO_SAM3_FILE`, `MILIMO_SAM3_SHA256`
 - `MILIMO_GEMMA3_REPO`, `MILIMO_GEMMA3_FILE`, `MILIMO_GEMMA3_SHA256`
 
@@ -104,8 +105,15 @@ Validated default public sources currently used:
 
 - LTX2 GGUF: `unsloth/LTX-2-GGUF` (`Q4_K_M`, `Q6_K`)
 - Flux2 Klein GGUF: `unsloth/FLUX.2-klein-9B-GGUF` (`Q4_K_M`, `Q8_0`)
+- Flux2 AE (native): `Kijai/flux-fp8` (`flux-vae-bf16.safetensors` saved as `backend/models/flux2/ae.safetensors`)
 - SAM3 checkpoint: `1038lab/sam3` (`sam3.pt`)
 - Gemma3 GGUF: `unsloth/gemma-3-12b-it-GGUF` (`Q4_K_M`)
+
+## GPU Runtime Notes
+
+- Install and update now run `python scripts/ensure_torch_cuda.py` to detect NVIDIA GPUs and switch PyTorch to a CUDA build when available.
+- If CUDA wheels cannot be resolved for your environment, the app falls back to CPU mode and logs a warning.
+- You can override tried CUDA indexes with `MILIMO_TORCH_CUDA_INDEXES` (comma-separated URLs).
 
 If you override with gated/private repos, set `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`.
 

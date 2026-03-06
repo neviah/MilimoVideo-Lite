@@ -60,6 +60,15 @@ DEFAULT_MANIFEST: List[ModelSpec] = [
         quant="8bit",
     ),
     ModelSpec(
+        key="flux2_ae_native",
+        repo_id=os.environ.get("MILIMO_FLUX2_AE_REPO", "Kijai/flux-fp8"),
+        filename=os.environ.get("MILIMO_FLUX2_AE_FILE", "flux-vae-bf16.safetensors"),
+        out_rel_path="flux2/ae.safetensors",
+        sha256=os.environ.get("MILIMO_FLUX2_AE_SHA256") or None,
+        quant="bf16",
+        required_for_modes=("high", "low", "cpu"),
+    ),
+    ModelSpec(
         key="sam3_quant",
         repo_id=os.environ.get("MILIMO_SAM3_REPO", "1038lab/sam3"),
         filename=os.environ.get("MILIMO_SAM3_FILE", "sam3.pt"),
