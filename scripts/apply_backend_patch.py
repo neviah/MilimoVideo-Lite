@@ -19,6 +19,18 @@ def patch_once(path: Path, needle: str, inject: str) -> None:
     path.write_text(text.replace(needle, needle + inject), encoding="utf-8")
 
 
+def replace_region(path: Path, start_marker: str, end_marker: str, replacement: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    start = text.find(start_marker)
+    if start < 0:
+        raise RuntimeError(f"Could not patch {path}: start marker not found")
+    end = text.find(end_marker, start)
+    if end < 0:
+        raise RuntimeError(f"Could not patch {path}: end marker not found")
+    new_text = text[:start] + replacement + text[end:]
+    path.write_text(new_text, encoding="utf-8")
+
+
 def remove_text(path: Path, target: str) -> None:
     text = path.read_text(encoding="utf-8")
     if target in text:
@@ -68,11 +80,15 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
     if not file_path.exists():
         return
 
-    needle = (
+    qwen_replacement = (
+        "            # Set Qwen paths\n"
+        "            qwen_path = os.path.join(base_path, \"text_encoder\")\n"
+        "            qwen_tokenizer_path = os.path.join(base_path, \"tokenizer\")\n"
+        "            if os.path.exists(qwen_path):\n"
+        "                os.environ[\"QWEN3_8B_PATH\"] = qwen_path\n"
         "            if os.path.exists(qwen_tokenizer_path):\n"
         "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = qwen_tokenizer_path\n"
-    )
-    inject = (
+        "\n"
         "            has_triton = False\n"
         "            try:\n"
         "                import triton  # type: ignore  # noqa: F401\n"
@@ -81,7 +97,7 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                has_triton = False\n"
         "\n"
         "            if self.device == \"cuda\" and not has_triton:\n"
-        "                # Windows CUDA often lacks Triton wheels; force non-FP8 text encoder.\n"
+        "                # Windows CUDA often lacks Triton wheels; force smaller non-FP8 text encoder.\n"
         "                cuda_qwen = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen2.5-1.5B-Instruct\")\n"
         "                cuda_tok = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_TOKENIZER\", cuda_qwen)\n"
         "                text_device = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE\", \"cpu\")\n"
@@ -89,59 +105,69 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = cuda_tok\n"
         "                os.environ[\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\"] = text_device\n"
         "                logger.warning(f\"Triton not available on CUDA runtime. Using non-FP8 Qwen fallback on {text_device}.\")\n"
-
+        "\n"
         "            if self.device == \"cpu\":\n"
-        "                # CPU-safe fallback: avoid default FP8 checkpoint which requires GPU/XPU.\n"
         "                cpu_qwen = os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\")\n"
         "                cpu_tok = os.environ.get(\"MILIMO_QWEN3_CPU_TOKENIZER\", cpu_qwen)\n"
         "                os.environ.setdefault(\"QWEN3_8B_PATH\", cpu_qwen)\n"
         "                os.environ.setdefault(\"QWEN3_8B_TOKENIZER_PATH\", cpu_tok)\n"
         "                logger.warning(\"CUDA not available for Flux text encoder. Using non-FP8 CPU fallback model.\")\n"
+        "\n"
     )
-    patch_once(file_path, needle, inject)
+    replace_region(
+        file_path,
+        "            # Set Qwen paths\n",
+        "            model_name = \"flux.2-klein-9b\"\n",
+        qwen_replacement,
+    )
 
-    # Add resilient retry chain around text encoder load for CPU fallback mode.
-    load_line = "            self.text_encoder = load_text_encoder(model_name, device=self.device)\n"
-    if load_line in file_path.read_text(encoding="utf-8"):
-        retry_block = (
-            "            try:\n"
-            "                text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
-            "                self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
-            "            except Exception as text_exc:\n"
-            "                err_text = str(text_exc)\n"
-            "                needs_non_fp8_fallback = (\n"
-            "                    self.device == \"cpu\"\n"
-            "                    or \"No module named 'triton'\" in err_text\n"
-            "                    or \"finegrained_fp8\" in err_text\n"
-            "                    or \"FP8\" in err_text\n"
-            "                )\n"
-            "                if not needs_non_fp8_fallback:\n"
-            "                    raise\n"
-            "                logger.warning(f\"Primary text encoder failed, trying non-FP8 fallback: {text_exc}\")\n"
-            "                fallback_chain = [\n"
-            "                    os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen2.5-1.5B-Instruct\"),\n"
-            "                    os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\"),\n"
-            "                    \"Qwen/Qwen3-8B-Base\",\n"
-            "                    \"Qwen/Qwen2.5-7B-Instruct\",\n"
-            "                ]\n"
-            "                text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
-            "                loaded = False\n"
-            "                for fb in fallback_chain:\n"
-            "                    if not fb:\n"
-            "                        continue\n"
-            "                    os.environ[\"QWEN3_8B_PATH\"] = fb\n"
-            "                    os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = fb\n"
-            "                    logger.warning(f\"Retrying text encoder with fallback model: {fb} (device={text_encoder_device})\")\n"
-            "                    try:\n"
-            "                        self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
-            "                        loaded = True\n"
-            "                        break\n"
-            "                    except Exception as fb_exc:\n"
-            "                        logger.warning(f\"CPU fallback model failed ({fb}): {fb_exc}\")\n"
-            "                if not loaded:\n"
-            "                    raise\n"
-        )
-        patch_once(file_path, load_line, retry_block)
+    text_encoder_replacement = (
+        "            logger.info(\"Loading Text Encoder...\")\n"
+        "            try:\n"
+        "                text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
+        "                self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
+        "            except Exception as text_exc:\n"
+        "                err_text = str(text_exc)\n"
+        "                needs_non_fp8_fallback = (\n"
+        "                    self.device == \"cpu\"\n"
+        "                    or \"No module named 'triton'\" in err_text\n"
+        "                    or \"finegrained_fp8\" in err_text\n"
+        "                    or \"FP8\" in err_text\n"
+        "                    or \"out of memory\" in err_text.lower()\n"
+        "                )\n"
+        "                if not needs_non_fp8_fallback:\n"
+        "                    raise\n"
+        "                logger.warning(f\"Primary text encoder failed, trying non-FP8 fallback: {text_exc}\")\n"
+        "                fallback_chain = [\n"
+        "                    os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen2.5-1.5B-Instruct\"),\n"
+        "                    os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\"),\n"
+        "                    \"Qwen/Qwen3-8B-Base\",\n"
+        "                    \"Qwen/Qwen2.5-7B-Instruct\",\n"
+        "                ]\n"
+        "                text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
+        "                loaded = False\n"
+        "                for fb in fallback_chain:\n"
+        "                    if not fb:\n"
+        "                        continue\n"
+        "                    os.environ[\"QWEN3_8B_PATH\"] = fb\n"
+        "                    os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = fb\n"
+        "                    logger.warning(f\"Retrying text encoder with fallback model: {fb} (device={text_encoder_device})\")\n"
+        "                    try:\n"
+        "                        self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
+        "                        loaded = True\n"
+        "                        break\n"
+        "                    except Exception as fb_exc:\n"
+        "                        logger.warning(f\"Text-encoder fallback failed ({fb}): {fb_exc}\")\n"
+        "                if not loaded:\n"
+        "                    raise\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "            logger.info(\"Loading Text Encoder...\")\n",
+        "            # Load AutoEncoder\n",
+        text_encoder_replacement,
+    )
 
 
 def patch_server_startup(backend_dir: Path) -> None:
