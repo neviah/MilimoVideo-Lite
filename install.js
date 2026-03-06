@@ -37,8 +37,7 @@ module.exports = {
           "python -m pip install llama-cpp-python || echo Optional llama-cpp-python install skipped",
           "python -m pip install unsloth || echo Optional unsloth install skipped",
           "python scripts/apply_backend_patch.py sandbox/workspace/milimovideo",
-          "cd sandbox/workspace/milimovideo/web-app && npm install",
-          "cd ..\\..\\..\\..",
+          "npm --prefix sandbox/workspace/milimovideo/web-app install",
           "node scripts/create_sandbox_config.js",
           "echo MilimoVideo-Lite install completed"
         ]
