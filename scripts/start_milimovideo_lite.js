@@ -17,21 +17,25 @@ if (!fs.existsSync(webDir)) {
 
 fs.mkdirSync(logDir, { recursive: true });
 
+function getViteCmdPath() {
+  return path.join(webDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+}
+
 function ensureFrontendDeps() {
-  const viteCmd = path.join(webDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+  const viteCmd = getViteCmdPath();
   if (fs.existsSync(viteCmd)) {
-    return;
+    return viteCmd;
   }
 
   console.log("Installing frontend dependencies (missing vite binary)...");
   const result = process.platform === "win32"
-    ? spawnSync("cmd.exe", ["/d", "/s", "/c", "npm install --include=dev"], {
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", "npm install --include=dev --no-audit --no-fund"], {
         cwd: webDir,
         env: process.env,
         stdio: "inherit",
         windowsHide: true,
       })
-    : spawnSync("npm", ["install", "--include=dev"], {
+    : spawnSync("npm", ["install", "--include=dev", "--no-audit", "--no-fund"], {
         cwd: webDir,
         env: process.env,
         stdio: "inherit",
@@ -44,9 +48,11 @@ function ensureFrontendDeps() {
   if (!fs.existsSync(viteCmd)) {
     throw new Error("Frontend dependencies installed but vite binary is still missing.");
   }
+
+  return viteCmd;
 }
 
-ensureFrontendDeps();
+const viteCmdPath = ensureFrontendDeps();
 
 const pyCandidate = process.platform === "win32"
   ? path.join(__dirname, "..", "sandbox", "venv", "Scripts", "python.exe")
@@ -77,7 +83,12 @@ const frontendEnv = { ...process.env, BROWSER: "none" };
 const frontend = process.platform === "win32"
   ? spawn(
       "cmd.exe",
-      ["/d", "/s", "/c", "npm run dev -- --host 127.0.0.1 --port 5173"],
+      [
+        "/d",
+        "/s",
+        "/c",
+        `"${viteCmdPath}" --host 127.0.0.1 --port 5173`,
+      ],
       {
         cwd: webDir,
         env: frontendEnv,
@@ -85,7 +96,7 @@ const frontend = process.platform === "win32"
         windowsHide: true,
       }
     )
-  : spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"], {
+  : spawn(viteCmdPath, ["--host", "127.0.0.1", "--port", "5173"], {
       cwd: webDir,
       env: frontendEnv,
       stdio: ["inherit", "pipe", "pipe"],
