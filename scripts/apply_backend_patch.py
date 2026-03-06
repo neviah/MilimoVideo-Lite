@@ -179,6 +179,38 @@ def patch_sam_startup(project_root: Path) -> None:
     )
 
 
+def patch_model_engine(backend_dir: Path) -> None:
+    file_path = backend_dir / "model_engine.py"
+    if not file_path.exists():
+        return
+
+    patch_once(
+        file_path,
+        "            \"gemma_root\": os.path.join(models_dir, \"text_encoders\", \"gemma3\"),\n",
+        "            \"gemma_root\": os.path.join(config.BACKEND_DIR, \"models\", \"text_encoders\", \"gemma3\"),\n",
+    )
+
+    fp8_block_old = (
+        "            is_mps = (device == \"mps\")\n"
+        "            fp8 = False if is_mps else True \n"
+    )
+    fp8_block_new = (
+        "            is_mps = (device == \"mps\")\n"
+        "            fp8 = False\n"
+        "            if device == \"cuda\":\n"
+        "                try:\n"
+        "                    major, minor = torch.cuda.get_device_capability(0)\n"
+        "                    # FP8 needs Ada/Hopper-class GPU support (RTX 40xx+ or better).\n"
+        "                    fp8 = (major, minor) >= (8, 9)\n"
+        "                    if not fp8:\n"
+        "                        logger.warning(f\"Disabling FP8 transformer on unsupported GPU capability {major}.{minor}\")\n"
+        "                except Exception as cap_exc:\n"
+        "                    logger.warning(f\"Unable to detect CUDA capability for FP8 gate: {cap_exc}\")\n"
+        "                    fp8 = False\n"
+    )
+    patch_once(file_path, fp8_block_old, fp8_block_new)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apply MilimoVideo-Lite backend patch")
     parser.add_argument("project_root", help="Path to cloned milimovideo repo")
@@ -197,6 +229,7 @@ def main() -> None:
     patch_video_task(backend_dir)
     patch_image_task(backend_dir)
     patch_flux_wrapper(backend_dir)
+    patch_model_engine(backend_dir)
     patch_server_startup(backend_dir)
     patch_sam_startup(project_root)
 

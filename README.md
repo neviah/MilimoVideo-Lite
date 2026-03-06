@@ -99,7 +99,11 @@ Model source defaults are configurable via environment variables:
 - `MILIMO_FLUX2_Q8_REPO`, `MILIMO_FLUX2_Q8_FILE`, `MILIMO_FLUX2_Q8_SHA256`
 - `MILIMO_FLUX2_AE_REPO`, `MILIMO_FLUX2_AE_FILE`, `MILIMO_FLUX2_AE_SHA256`
 - `MILIMO_SAM3_REPO`, `MILIMO_SAM3_FILE`, `MILIMO_SAM3_SHA256`
-- `MILIMO_GEMMA3_REPO`, `MILIMO_GEMMA3_FILE`, `MILIMO_GEMMA3_SHA256`
+- `MILIMO_GEMMA3_REPO`
+- `MILIMO_GEMMA3_CONFIG_FILE`, `MILIMO_GEMMA3_INDEX_FILE`
+- `MILIMO_GEMMA3_SHARD1_FILE`, `MILIMO_GEMMA3_SHARD2_FILE`
+- `MILIMO_GEMMA3_TOKENIZER_FILE`, `MILIMO_GEMMA3_TOKENIZER_JSON_FILE`, `MILIMO_GEMMA3_TOKENIZER_CONFIG_FILE`
+- `MILIMO_GEMMA3_SPECIAL_TOKENS_FILE`, `MILIMO_GEMMA3_PREPROCESSOR_FILE`
 
 Validated default public sources currently used:
 
@@ -107,7 +111,13 @@ Validated default public sources currently used:
 - Flux2 Klein GGUF: `unsloth/FLUX.2-klein-9B-GGUF` (`Q4_K_M`, `Q8_0`)
 - Flux2 AE (native): `Kijai/flux-fp8` (`flux-vae-bf16.safetensors` saved as `backend/models/flux2/ae.safetensors`)
 - SAM3 checkpoint: `1038lab/sam3` (`sam3.pt`)
-- Gemma3 GGUF: `unsloth/gemma-3-12b-it-GGUF` (`Q4_K_M`)
+- Gemma3 text encoder (LTX compatible): `unsloth/gemma-3-4b-it` (safetensors shards + tokenizer/processor files)
+
+## RTX 30-Series Notes
+
+- RTX 30-series cards are supported.
+- FP8 transformer mode is now auto-disabled on CUDA GPUs with capability below 8.9 (includes most 30xx cards), preventing "FP8 not compatible" errors.
+- Flux text encoder now falls back to non-FP8 Qwen automatically when Triton is unavailable on Windows CUDA setups.
 
 ## GPU Runtime Notes
 
