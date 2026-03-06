@@ -1,4 +1,4 @@
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -16,6 +16,33 @@ if (!fs.existsSync(webDir)) {
 }
 
 fs.mkdirSync(logDir, { recursive: true });
+
+function ensureFrontendDeps() {
+  const viteCmd = path.join(webDir, "node_modules", ".bin", process.platform === "win32" ? "vite.cmd" : "vite");
+  if (fs.existsSync(viteCmd)) {
+    return;
+  }
+
+  console.log("Installing frontend dependencies (missing vite binary)...");
+  const result = process.platform === "win32"
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", "npm install"], {
+        cwd: webDir,
+        env: process.env,
+        stdio: "inherit",
+        windowsHide: true,
+      })
+    : spawnSync("npm", ["install"], {
+        cwd: webDir,
+        env: process.env,
+        stdio: "inherit",
+      });
+
+  if (result.status !== 0) {
+    throw new Error(`npm install failed with exit code ${result.status}`);
+  }
+}
+
+ensureFrontendDeps();
 
 const pyCandidate = process.platform === "win32"
   ? path.join(__dirname, "..", "sandbox", "venv", "Scripts", "python.exe")
