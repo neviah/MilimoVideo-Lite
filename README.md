@@ -97,6 +97,7 @@ Model source defaults are configurable via environment variables:
 - `MILIMO_LTX2_GGUF_Q6_REPO`, `MILIMO_LTX2_GGUF_Q6_FILE`, `MILIMO_LTX2_GGUF_Q6_SHA256`
 - `MILIMO_FLUX2_Q4_REPO`, `MILIMO_FLUX2_Q4_FILE`, `MILIMO_FLUX2_Q4_SHA256`
 - `MILIMO_FLUX2_Q8_REPO`, `MILIMO_FLUX2_Q8_FILE`, `MILIMO_FLUX2_Q8_SHA256`
+- `MILIMO_FLUX2_SAFETENSORS_REPO`, `MILIMO_FLUX2_SAFETENSORS_FILE`, `MILIMO_FLUX2_SAFETENSORS_SHA256`
 - `MILIMO_FLUX2_AE_REPO`, `MILIMO_FLUX2_AE_FILE`, `MILIMO_FLUX2_AE_SHA256`
 - `MILIMO_SAM3_REPO`, `MILIMO_SAM3_FILE`, `MILIMO_SAM3_SHA256`
 - `MILIMO_GEMMA3_REPO`
@@ -109,6 +110,7 @@ Validated default public sources currently used:
 
 - LTX2 GGUF: `unsloth/LTX-2-GGUF` (`Q4_K_M`, `Q6_K`)
 - Flux2 Klein GGUF: `unsloth/FLUX.2-klein-9B-GGUF` (`Q4_K_M`, `Q8_0`)
+- Flux2 Klein weights (required by current Flux backend): `dci05049/flux2-klein-9b` (`flux-2-klein-9b.safetensors`)
 - Flux2 AE (native): `dci05049/flux2-klein-9b` (`flux2-vae.safetensors` saved as `backend/models/flux2/ae.safetensors`)
 - SAM3 checkpoint: `1038lab/sam3` (`sam3.pt`)
 - Gemma3 text encoder (LTX compatible): `unsloth/gemma-3-4b-it` (safetensors shards + tokenizer/processor files)

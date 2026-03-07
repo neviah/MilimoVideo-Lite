@@ -61,6 +61,15 @@ DEFAULT_MANIFEST: List[ModelSpec] = [
         quant="8bit",
     ),
     ModelSpec(
+        key="flux2_klein_safetensors",
+        repo_id=os.environ.get("MILIMO_FLUX2_SAFETENSORS_REPO", "dci05049/flux2-klein-9b"),
+        filename=os.environ.get("MILIMO_FLUX2_SAFETENSORS_FILE", "flux-2-klein-9b.safetensors"),
+        out_rel_path="flux2/flux-2-klein-9b.safetensors",
+        sha256=os.environ.get("MILIMO_FLUX2_SAFETENSORS_SHA256") or None,
+        quant="bf16",
+        required_for_modes=("high", "low", "cpu"),
+    ),
+    ModelSpec(
         key="flux2_ae_native",
         repo_id=os.environ.get("MILIMO_FLUX2_AE_REPO", "dci05049/flux2-klein-9b"),
         filename=os.environ.get("MILIMO_FLUX2_AE_FILE", "flux2-vae.safetensors"),
