@@ -272,6 +272,74 @@ def patch_model_engine(backend_dir: Path) -> None:
     patch_once(file_path, fp8_block_old, fp8_block_new)
 
 
+def patch_storyboard_routes(backend_dir: Path) -> None:
+    file_path = backend_dir / "routes" / "storyboard.py"
+    if not file_path.exists():
+        return
+
+    ai_parse_replacement = (
+        "@router.post(\"/projects/{project_id}/storyboard/ai-parse\")\n"
+        "async def ai_parse(project_id: str, req: ScriptParseRequest):\n"
+        "    \"\"\"AI-powered script parsing using Gemma 3.\n"
+        "\n"
+        "    Falls back to regex parser if Gemma/full LTX checkpoint is unavailable.\n"
+        "    Both paths include element matching.\n"
+        "    \"\"\"\n"
+        "    from managers.element_manager import element_manager\n"
+        "    project_elements = element_manager.get_elements(project_id)\n"
+        "\n"
+        "    ckpt_full = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled.safetensors\")\n"
+        "    ckpt_fp8 = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled-fp8.safetensors\")\n"
+        "    if not (os.path.exists(ckpt_full) or os.path.exists(ckpt_fp8)):\n"
+        "        logger.info(\"AI parse unavailable in Lite mode (missing full LTX checkpoint). Using fallback parser.\")\n"
+        "        parsed_scenes = script_parser.parse_script(\n"
+        "            req.script_text,\n"
+        "            parse_mode=\"auto\",\n"
+        "            elements=project_elements if project_elements else None,\n"
+        "        )\n"
+        "        return {\"scenes\": parsed_scenes, \"mode\": \"fallback\"}\n"
+        "\n"
+        "    try:\n"
+        "        from model_engine import manager\n"
+        "\n"
+        "        pipeline = await manager.load_pipeline(\"ti2vid\")\n"
+        "        text_encoder = pipeline.stage_1_model_ledger.text_encoder()\n"
+        "\n"
+        "        parsed_scenes = ai_parse_script(\n"
+        "            text=req.script_text,\n"
+        "            text_encoder=text_encoder,\n"
+        "            seed=42,\n"
+        "            project_elements=project_elements if project_elements else None,\n"
+        "        )\n"
+        "\n"
+        "        del text_encoder\n"
+        "        from ltx_pipelines.utils.helpers import cleanup_memory\n"
+        "        cleanup_memory()\n"
+        "\n"
+        "        return {\"scenes\": parsed_scenes, \"mode\": \"ai\"}\n"
+        "\n"
+        "    except Exception as e:\n"
+        "        logger.warning(f\"AI parse failed, falling back to regex: {e}\")\n"
+        "        try:\n"
+        "            parsed_scenes = script_parser.parse_script(\n"
+        "                req.script_text,\n"
+        "                parse_mode=\"auto\",\n"
+        "                elements=project_elements if project_elements else None,\n"
+        "            )\n"
+        "            return {\"scenes\": parsed_scenes, \"mode\": \"fallback\"}\n"
+        "        except Exception as e2:\n"
+        "            logger.error(f\"Fallback parse also failed: {e2}\")\n"
+        "            raise HTTPException(status_code=500, detail=str(e2))\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "@router.post(\"/projects/{project_id}/storyboard/ai-parse\")\n",
+        "@router.post(\"/projects/{project_id}/storyboard/match-elements\")\n",
+        ai_parse_replacement,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Apply MilimoVideo-Lite backend patch")
     parser.add_argument("project_root", help="Path to cloned milimovideo repo")
@@ -291,6 +359,7 @@ def main() -> None:
     patch_image_task(backend_dir)
     patch_flux_wrapper(backend_dir)
     patch_model_engine(backend_dir)
+    patch_storyboard_routes(backend_dir)
     patch_server_startup(backend_dir)
     patch_sam_startup(project_root)
 
