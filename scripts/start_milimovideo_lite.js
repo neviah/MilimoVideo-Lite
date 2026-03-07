@@ -64,7 +64,8 @@ const backendEnv = {
   MILIMO_LITE_SANDBOX_ROOT: path.join(__dirname, "..", "sandbox"),
   MILIMO_VRAM_MODE: process.env.MILIMO_VRAM_MODE || "auto",
   PYTORCH_CUDA_ALLOC_CONF: process.env.PYTORCH_CUDA_ALLOC_CONF || "expandable_segments:True",
-  MILIMO_QWEN3_CUDA_NO_TRITON_PATH: process.env.MILIMO_QWEN3_CUDA_NO_TRITON_PATH || "Qwen/Qwen2.5-1.5B-Instruct",
+  MILIMO_QWEN3_CUDA_NO_TRITON_PATH: "Qwen/Qwen3-8B",
+  MILIMO_QWEN3_CUDA_NO_TRITON_TOKENIZER: "Qwen/Qwen3-8B",
   MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE: process.env.MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE || "cpu",
   PYTHONUNBUFFERED: "1",
 };

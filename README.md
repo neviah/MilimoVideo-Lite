@@ -126,7 +126,7 @@ Validated default public sources currently used:
 - Install and update now run `python scripts/ensure_torch_cuda.py` to detect NVIDIA GPUs and switch PyTorch to a CUDA build when available.
 - If CUDA wheels cannot be resolved for your environment, the app falls back to CPU mode and logs a warning.
 - You can override tried CUDA indexes with `MILIMO_TORCH_CUDA_INDEXES` (comma-separated URLs).
-- On Windows CUDA without Triton, Flux text encoder defaults to a smaller non-FP8 model (`Qwen/Qwen2.5-1.5B-Instruct`) on CPU to avoid VRAM spikes.
+- On Windows CUDA without Triton, Flux text encoder defaults to a non-FP8 compatible model (`Qwen/Qwen3-8B`) on CPU.
 - Override behavior with `MILIMO_QWEN3_CUDA_NO_TRITON_PATH` and `MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE`.
 - Backend launch sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default to reduce allocator fragmentation.
 

@@ -37,6 +37,12 @@ def remove_text(path: Path, target: str) -> None:
         path.write_text(text.replace(target, ""), encoding="utf-8")
 
 
+def replace_text(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if old in text:
+        path.write_text(text.replace(old, new), encoding="utf-8")
+
+
 def patch_video_task(backend_dir: Path) -> None:
     file_path = backend_dir / "tasks" / "video.py"
     patch_once(
@@ -98,8 +104,9 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "\n"
         "            if self.device == \"cuda\" and not has_triton:\n"
         "                # Windows CUDA often lacks Triton wheels; force smaller non-FP8 text encoder.\n"
-        "                cuda_qwen = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen2.5-1.5B-Instruct\")\n"
-        "                cuda_tok = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_TOKENIZER\", cuda_qwen)\n"
+        "                # Hard-pin compatible encoder for Flux Klein-9B in no-Triton CUDA mode.\n"
+        "                cuda_qwen = \"Qwen/Qwen3-8B\"\n"
+        "                cuda_tok = \"Qwen/Qwen3-8B\"\n"
         "                text_device = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE\", \"cpu\")\n"
         "                os.environ[\"QWEN3_8B_PATH\"] = cuda_qwen\n"
         "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = cuda_tok\n"
@@ -120,6 +127,24 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "            model_name = \"flux.2-klein-9b\"\n",
         qwen_replacement,
     )
+    cuda_no_triton_block = (
+        "            if self.device == \"cuda\" and not has_triton:\n"
+        "                # Windows CUDA often lacks Triton wheels; force compatible non-FP8 text encoder.\n"
+        "                cuda_qwen = \"Qwen/Qwen3-8B\"\n"
+        "                cuda_tok = \"Qwen/Qwen3-8B\"\n"
+        "                text_device = os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE\", \"cpu\")\n"
+        "                os.environ[\"QWEN3_8B_PATH\"] = cuda_qwen\n"
+        "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = cuda_tok\n"
+        "                os.environ[\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\"] = text_device\n"
+        "                logger.warning(f\"Triton not available on CUDA runtime. Using non-FP8 Qwen fallback on {text_device}.\")\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "            if self.device == \"cuda\" and not has_triton:\n",
+        "            if self.device == \"cpu\":\n",
+        cuda_no_triton_block,
+    )
 
     text_encoder_replacement = (
         "            logger.info(\"Loading Text Encoder...\")\n"
@@ -139,7 +164,7 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                    raise\n"
         "                logger.warning(f\"Primary text encoder failed, trying non-FP8 fallback: {text_exc}\")\n"
         "                fallback_chain = [\n"
-        "                    os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen2.5-1.5B-Instruct\"),\n"
+        "                    os.environ.get(\"MILIMO_QWEN3_CUDA_NO_TRITON_PATH\", \"Qwen/Qwen3-8B\"),\n"
         "                    os.environ.get(\"MILIMO_QWEN3_CPU_PATH\", \"Qwen/Qwen3-8B\"),\n"
         "                    \"Qwen/Qwen3-8B-Base\",\n"
         "                    \"Qwen/Qwen2.5-7B-Instruct\",\n"
@@ -161,12 +186,72 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                if not loaded:\n"
         "                    raise\n"
         "\n"
+        "            # Flux2 Klein-9B expects text embedding width 12288 (3 * hidden_size 4096).\n"
+        "            expected_ctx_width = 12288\n"
+        "            ctx_width = 0\n"
+        "            try:\n"
+        "                probe_ctx = self.text_encoder([\"compatibility probe\"])\n"
+        "                ctx_width = int(probe_ctx.shape[-1])\n"
+        "                del probe_ctx\n"
+        "            except Exception as probe_exc:\n"
+        "                logger.warning(f\"Unable to probe text encoder width: {probe_exc}\")\n"
+        "            if ctx_width and ctx_width != expected_ctx_width:\n"
+        "                logger.warning(\n"
+        "                    f\"Incompatible text encoder width={ctx_width} (expected {expected_ctx_width}); forcing Qwen/Qwen3-8B fallback\"\n"
+        "                )\n"
+        "                os.environ[\"QWEN3_8B_PATH\"] = \"Qwen/Qwen3-8B\"\n"
+        "                os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = \"Qwen/Qwen3-8B\"\n"
+        "                text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
+        "                self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
+        "                try:\n"
+        "                    probe_ctx = self.text_encoder([\"compatibility probe\"])\n"
+        "                    ctx_width = int(probe_ctx.shape[-1])\n"
+        "                    del probe_ctx\n"
+        "                    logger.info(f\"Text encoder width after fallback: {ctx_width}\")\n"
+        "                except Exception as probe_exc:\n"
+        "                    logger.warning(f\"Unable to verify text encoder width after fallback: {probe_exc}\")\n"
+        "\n"
     )
     replace_region(
         file_path,
         "            logger.info(\"Loading Text Encoder...\")\n",
         "            # Load AutoEncoder\n",
         text_encoder_replacement,
+    )
+
+    positive_ctx_replacement = (
+        "                ctx = self.text_encoder([prompt]).to(self.dtype)\n"
+        "                try:\n"
+        "                    ctx_width = int(ctx.shape[-1])\n"
+        "                except Exception:\n"
+        "                    ctx_width = 0\n"
+        "                if ctx_width and ctx_width != 12288:\n"
+        "                    logger.warning(\n"
+        "                        f\"Prompt embedding width {ctx_width} is incompatible with Flux Klein-9B; reloading Qwen/Qwen3-8B\"\n"
+        "                    )\n"
+        "                    from flux2.util import load_text_encoder\n"
+        "                    os.environ[\"QWEN3_8B_PATH\"] = \"Qwen/Qwen3-8B\"\n"
+        "                    os.environ[\"QWEN3_8B_TOKENIZER_PATH\"] = \"Qwen/Qwen3-8B\"\n"
+        "                    text_encoder_device = os.environ.get(\"MILIMO_QWEN3_TEXT_ENCODER_DEVICE\", self.device)\n"
+        "                    self.text_encoder = load_text_encoder(model_name, device=text_encoder_device)\n"
+        "                    ctx = self.text_encoder([prompt]).to(self.dtype)\n"
+        "                ctx = ctx.to(self.device)\n"
+        "                ctx, ctx_ids = batched_prc_txt(ctx)\n"
+    )
+    replace_region(
+        file_path,
+        "                ctx = self.text_encoder([prompt]).to(self.dtype)\n",
+        "                ctx, ctx_ids = batched_prc_txt(ctx)\n",
+        positive_ctx_replacement,
+    )
+    remove_text(
+        file_path,
+        "                ctx, ctx_ids = batched_prc_txt(ctx)\n                ctx, ctx_ids = batched_prc_txt(ctx)\n",
+    )
+    patch_once(
+        file_path,
+        "                    ctx_uncond = self.text_encoder([neg_txt]).to(self.dtype)\n",
+        "                    ctx_uncond = ctx_uncond.to(self.device)\n",
     )
 
     ae_replacement = (
@@ -183,6 +268,10 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                os.environ[\"AE_MODEL_PATH\"] = ae_path_file\n"
         "                self.ae = load_ae(model_name, device=self.device)\n"
         "                self.ae.eval()\n"
+        "                try:\n"
+        "                    self.ae = self.ae.to(device=self.device, dtype=self.dtype)\n"
+        "                except Exception:\n"
+        "                    self.ae = self.ae.to(self.device)\n"
         "\n"
         "            elif os.path.exists(ae_path_dir) and os.path.exists(os.path.join(ae_path_dir, \"config.json\")):\n"
         "                logger.warning(f\"Using Diffusers VAE fallback (Native Requested: {enable_ae})\")\n"
@@ -191,6 +280,10 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                logger.warning(\"No local VAE found, trying HuggingFace download...\")\n"
         "                self.ae = load_ae(model_name, device=self.device)\n"
         "                self.ae.eval()\n"
+        "                try:\n"
+        "                    self.ae = self.ae.to(device=self.device, dtype=self.dtype)\n"
+        "                except Exception:\n"
+        "                    self.ae = self.ae.to(self.device)\n"
         "\n"
     )
     replace_region(
@@ -198,6 +291,33 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "            # Load AutoEncoder\n",
         "            self.using_native_ae = loaded_native\n",
         ae_replacement,
+    )
+
+    latent_ref_replacement = (
+        "                dummy_img = Image.new(\"RGB\", (W, H), (0, 0, 0))\n"
+        "                img_tensor = torch.from_numpy(np.array(dummy_img)).float() / 127.5 - 1.0\n"
+        "                img_tensor = rearrange(img_tensor, \"h w c -> 1 c h w\").to(self.device).to(self.dtype)\n"
+        "                try:\n"
+        "                    ae_dtype = next(self.ae.parameters()).dtype\n"
+        "                    img_tensor = img_tensor.to(ae_dtype)\n"
+        "                except Exception:\n"
+        "                    pass\n"
+        "                z_shape_ref = self.ae.encode(img_tensor)\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "                dummy_img = Image.new(\"RGB\", (W, H), (0, 0, 0))\n",
+        "                # Use Generator for noise to respect seed properly on all devices\n",
+        latent_ref_replacement,
+    )
+    remove_text(
+        file_path,
+        "                z_shape_ref = self.ae.encode(img_tensor)\n                z_shape_ref = self.ae.encode(img_tensor)\n",
+    )
+    remove_text(
+        file_path,
+        "                z_shape_ref = self.ae.encode(img_tensor)\n                z_shape_ref = self.ae.encode(img_tensor)\n                \n",
     )
 
 
