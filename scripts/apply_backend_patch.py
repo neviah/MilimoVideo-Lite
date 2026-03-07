@@ -169,6 +169,37 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         text_encoder_replacement,
     )
 
+    ae_replacement = (
+        "            # Load AutoEncoder\n"
+        "            # Prefer local ae.safetensors whenever present, even when Native AE toggle is off.\n"
+        "            loaded_native = False\n"
+        "\n"
+        "            if os.path.exists(ae_path_file):\n"
+        "                if enable_ae:\n"
+        "                    logger.info(f\"Loading Native AutoEncoder from {ae_path_file}...\")\n"
+        "                    loaded_native = True\n"
+        "                else:\n"
+        "                    logger.info(f\"Using local AutoEncoder from {ae_path_file} (native conditioning disabled)\")\n"
+        "                os.environ[\"AE_MODEL_PATH\"] = ae_path_file\n"
+        "                self.ae = load_ae(model_name, device=self.device)\n"
+        "                self.ae.eval()\n"
+        "\n"
+        "            elif os.path.exists(ae_path_dir) and os.path.exists(os.path.join(ae_path_dir, \"config.json\")):\n"
+        "                logger.warning(f\"Using Diffusers VAE fallback (Native Requested: {enable_ae})\")\n"
+        "                self.ae = FluxAEWrapper(ae_path_dir, self.device, dtype=self.dtype)\n"
+        "            else:\n"
+        "                logger.warning(\"No local VAE found, trying HuggingFace download...\")\n"
+        "                self.ae = load_ae(model_name, device=self.device)\n"
+        "                self.ae.eval()\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "            # Load AutoEncoder\n",
+        "            self.using_native_ae = loaded_native\n",
+        ae_replacement,
+    )
+
 
 def patch_server_startup(backend_dir: Path) -> None:
     file_path = backend_dir / "server.py"
