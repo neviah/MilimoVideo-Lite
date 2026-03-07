@@ -79,6 +79,16 @@ def patch_image_task(backend_dir: Path) -> None:
         "    params = adjust_image_params_for_mode(params)\n",
         "    before_image_task(job_id, params)\n",
     )
+    patch_once(
+        file_path,
+        "             img = flux_inpainter.generate_image(\n",
+        "             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n",
+    )
+    patch_once(
+        file_path,
+        "             # Save\n",
+        "             if prev_flux_model_path is None:\n                 os.environ.pop(\"KLEIN_9B_MODEL_PATH\", None)\n             else:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = prev_flux_model_path\n\n",
+    )
 
 
 def patch_element_manager(backend_dir: Path) -> None:
@@ -151,6 +161,12 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "    def load_model(self, enable_ae=True):\n",
         "        # Unload conflicting models (e.g., LTX) before loading Flux\n",
         load_model_gate_replacement,
+    )
+
+    replace_text(
+        file_path,
+        "            os.environ[\"KLEIN_9B_MODEL_PATH\"] = os.path.join(base_path, \"flux-2-klein-9b.safetensors\")\n",
+        "            # Respect externally provided model path (from low-VRAM planner); otherwise default to safetensors.\n            os.environ.setdefault(\"KLEIN_9B_MODEL_PATH\", os.path.join(base_path, \"flux-2-klein-9b.safetensors\"))\n            logger.info(f\"Flux model path resolved to: {os.environ.get('KLEIN_9B_MODEL_PATH')}\")\n",
     )
 
     qwen_replacement = (
