@@ -132,9 +132,14 @@ Validated default public sources currently used:
 - On Windows CUDA without Triton, Flux text encoder defaults to a non-FP8 compatible model (`Qwen/Qwen3-8B`) on CPU.
 - Override behavior with `MILIMO_QWEN3_CUDA_NO_TRITON_PATH` and `MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE`.
 - Backend launch sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default to reduce allocator fragmentation.
-- Override low-VRAM image caps with: `MILIMO_LOWVRAM_IMAGE_MAX_WIDTH`, `MILIMO_LOWVRAM_IMAGE_MAX_HEIGHT`, `MILIMO_LOWVRAM_IMAGE_MAX_STEPS`.
-- Override low-VRAM element visual caps with: `MILIMO_LOWVRAM_ELEMENT_MAX_WIDTH`, `MILIMO_LOWVRAM_ELEMENT_MAX_HEIGHT`, `MILIMO_LOWVRAM_ELEMENT_MAX_STEPS`.
-- Override low-VRAM video caps with: `MILIMO_LOWVRAM_VIDEO_MAX_WIDTH`, `MILIMO_LOWVRAM_VIDEO_MAX_HEIGHT`, `MILIMO_LOWVRAM_VIDEO_MAX_STEPS`.
+- Adaptive low-VRAM limits are enabled by default: requests can exceed the defaults up to hard safety ceilings.
+- Set `MILIMO_LOWVRAM_STRICT_CAPS=1` to enforce strict default caps (legacy behavior).
+- Image defaults: `MILIMO_LOWVRAM_IMAGE_DEFAULT_WIDTH`, `MILIMO_LOWVRAM_IMAGE_DEFAULT_HEIGHT`, `MILIMO_LOWVRAM_IMAGE_DEFAULT_STEPS`.
+- Image hard ceilings: `MILIMO_LOWVRAM_IMAGE_HARD_MAX_WIDTH`, `MILIMO_LOWVRAM_IMAGE_HARD_MAX_HEIGHT`, `MILIMO_LOWVRAM_IMAGE_HARD_MAX_STEPS`.
+- Element defaults: `MILIMO_LOWVRAM_ELEMENT_DEFAULT_WIDTH`, `MILIMO_LOWVRAM_ELEMENT_DEFAULT_HEIGHT`, `MILIMO_LOWVRAM_ELEMENT_DEFAULT_STEPS`.
+- Element hard ceilings: `MILIMO_LOWVRAM_ELEMENT_HARD_MAX_WIDTH`, `MILIMO_LOWVRAM_ELEMENT_HARD_MAX_HEIGHT`, `MILIMO_LOWVRAM_ELEMENT_HARD_MAX_STEPS`.
+- Video defaults: `MILIMO_LOWVRAM_VIDEO_DEFAULT_WIDTH`, `MILIMO_LOWVRAM_VIDEO_DEFAULT_HEIGHT`, `MILIMO_LOWVRAM_VIDEO_DEFAULT_STEPS`.
+- Video hard ceilings: `MILIMO_LOWVRAM_VIDEO_HARD_MAX_WIDTH`, `MILIMO_LOWVRAM_VIDEO_HARD_MAX_HEIGHT`, `MILIMO_LOWVRAM_VIDEO_HARD_MAX_STEPS`.
 
 If you override with gated/private repos, set `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`.
 

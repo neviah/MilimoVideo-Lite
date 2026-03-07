@@ -98,6 +98,10 @@ def _safe_int(value: Any, default: int) -> int:
         return default
 
 
+def _is_truthy(value: Any) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def adjust_video_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     bootstrap_lite_runtime()
     tuned = dict(params)
@@ -111,19 +115,24 @@ def adjust_video_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     result = planner.generate_video(tuned.get("prompt", ""), tuned)
     tuned.update(result.get("settings", {}))
 
-    # Keep endpoint schema untouched and constrain backend resource profile only.
-    tuned["num_inference_steps"] = min(
-        _safe_int(tuned.get("num_inference_steps", 40), 40),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_STEPS", 24), 24),
-    )
-    tuned["width"] = min(
-        _safe_int(tuned.get("width", 768), 768),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_WIDTH", 768), 768),
-    )
-    tuned["height"] = min(
-        _safe_int(tuned.get("height", 512), 512),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_HEIGHT", 432), 432),
-    )
+    strict_caps = _is_truthy(os.environ.get("MILIMO_LOWVRAM_STRICT_CAPS", "0"))
+
+    default_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_DEFAULT_STEPS", 24), 24)
+    default_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_DEFAULT_WIDTH", 768), 768)
+    default_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_DEFAULT_HEIGHT", 432), 432)
+
+    hard_max_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_HARD_MAX_STEPS", 28), 28)
+    hard_max_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_HARD_MAX_WIDTH", 960), 960)
+    hard_max_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_HARD_MAX_HEIGHT", 544), 544)
+
+    if strict_caps:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 40), 40), default_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", 768), 768), default_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", 512), 512), default_height)
+    else:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", default_steps), default_steps), hard_max_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", default_width), default_width), hard_max_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", default_height), default_height), hard_max_height)
 
     # Temporal chunking and latent tiling are injected as planner metadata.
     chunk_size = _safe_int(tuned.get("temporal_chunk_size", 6), 6)
@@ -155,18 +164,24 @@ def adjust_image_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     planner = router.image_pipeline()
     result = planner.generate_image(tuned.get("prompt", ""), tuned)
     tuned.update(result.get("settings", {}))
-    tuned["num_inference_steps"] = min(
-        _safe_int(tuned.get("num_inference_steps", 25), 25),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_STEPS", 8), 8),
-    )
-    tuned["width"] = min(
-        _safe_int(tuned.get("width", 1024), 1024),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_WIDTH", 640), 640),
-    )
-    tuned["height"] = min(
-        _safe_int(tuned.get("height", 1024), 1024),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_HEIGHT", 640), 640),
-    )
+    strict_caps = _is_truthy(os.environ.get("MILIMO_LOWVRAM_STRICT_CAPS", "0"))
+
+    default_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_DEFAULT_STEPS", 8), 8)
+    default_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_DEFAULT_WIDTH", 640), 640)
+    default_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_DEFAULT_HEIGHT", 640), 640)
+
+    hard_max_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_HARD_MAX_STEPS", 20), 20)
+    hard_max_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_HARD_MAX_WIDTH", 1024), 1024)
+    hard_max_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_HARD_MAX_HEIGHT", 1024), 1024)
+
+    if strict_caps:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 25), 25), default_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", 1024), 1024), default_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", 1024), 1024), default_height)
+    else:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", default_steps), default_steps), hard_max_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", default_width), default_width), hard_max_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", default_height), default_height), hard_max_height)
     tuned["enable_ae"] = True
     tuned["enable_true_cfg"] = False
 
@@ -194,18 +209,24 @@ def adjust_element_visual_params(params: Dict[str, Any]) -> Dict[str, Any]:
         tuned.setdefault("height", _safe_int(os.environ.get("MILIMO_ELEMENT_DEFAULT_HEIGHT", 768), 768))
         return tuned
 
-    tuned["num_inference_steps"] = min(
-        _safe_int(tuned.get("num_inference_steps", 25), 25),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_STEPS", 6), 6),
-    )
-    tuned["width"] = min(
-        _safe_int(tuned.get("width", 1024), 1024),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_WIDTH", 512), 512),
-    )
-    tuned["height"] = min(
-        _safe_int(tuned.get("height", 1024), 1024),
-        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_HEIGHT", 512), 512),
-    )
+    strict_caps = _is_truthy(os.environ.get("MILIMO_LOWVRAM_STRICT_CAPS", "0"))
+
+    default_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_DEFAULT_STEPS", 6), 6)
+    default_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_DEFAULT_WIDTH", 512), 512)
+    default_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_DEFAULT_HEIGHT", 512), 512)
+
+    hard_max_steps = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_HARD_MAX_STEPS", 12), 12)
+    hard_max_width = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_HARD_MAX_WIDTH", 768), 768)
+    hard_max_height = _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_HARD_MAX_HEIGHT", 768), 768)
+
+    if strict_caps:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 25), 25), default_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", 1024), 1024), default_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", 1024), 1024), default_height)
+    else:
+        tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", default_steps), default_steps), hard_max_steps)
+        tuned["width"] = min(_safe_int(tuned.get("width", default_width), default_width), hard_max_width)
+        tuned["height"] = min(_safe_int(tuned.get("height", default_height), default_height), hard_max_height)
 
     if mode == "cpu":
         tuned["width"] = min(tuned["width"], _safe_int(os.environ.get("MILIMO_CPU_ELEMENT_MAX_WIDTH", 384), 384))

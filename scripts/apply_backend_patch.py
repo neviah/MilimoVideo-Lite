@@ -435,6 +435,17 @@ def patch_sam_startup(project_root: Path) -> None:
     )
 
 
+def patch_flux2_text_encoder_defaults(project_root: Path) -> None:
+    file_path = project_root / "flux2" / "src" / "flux2" / "text_encoder.py"
+    if not file_path.exists():
+        return
+    replace_text(
+        file_path,
+        "    model_spec = os.environ.get(f\"QWEN3_{variant}_PATH\", f\"Qwen/Qwen3-{variant}-FP8\")\n",
+        "    # Avoid FP8 default on consumer GPUs that do not support fine-grained FP8 kernels.\n    model_spec = os.environ.get(f\"QWEN3_{variant}_PATH\", f\"Qwen/Qwen3-{variant}\")\n",
+    )
+
+
 def patch_model_engine(backend_dir: Path) -> None:
     file_path = backend_dir / "model_engine.py"
     if not file_path.exists():
@@ -558,6 +569,7 @@ def main() -> None:
     patch_storyboard_routes(backend_dir)
     patch_server_startup(backend_dir)
     patch_sam_startup(project_root)
+    patch_flux2_text_encoder_defaults(project_root)
 
     print("Applied MilimoVideo-Lite backend patches")
 
