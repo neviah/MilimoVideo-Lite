@@ -244,9 +244,10 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                ctx, ctx_ids = batched_prc_txt(ctx)\n",
         positive_ctx_replacement,
     )
-    remove_text(
+    replace_text(
         file_path,
         "                ctx, ctx_ids = batched_prc_txt(ctx)\n                ctx, ctx_ids = batched_prc_txt(ctx)\n",
+        "                ctx, ctx_ids = batched_prc_txt(ctx)\n",
     )
     patch_once(
         file_path,
@@ -305,19 +306,26 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
         "                z_shape_ref = self.ae.encode(img_tensor)\n"
         "\n"
     )
-    replace_region(
-        file_path,
-        "                dummy_img = Image.new(\"RGB\", (W, H), (0, 0, 0))\n",
-        "                # Use Generator for noise to respect seed properly on all devices\n",
-        latent_ref_replacement,
-    )
-    remove_text(
+    text = file_path.read_text(encoding="utf-8")
+    if (
+        "                dummy_img = Image.new(\"RGB\", (W, H), (0, 0, 0))\n" in text
+        and "                # Use Generator for noise to respect seed properly on all devices\n" in text
+    ):
+        replace_region(
+            file_path,
+            "                dummy_img = Image.new(\"RGB\", (W, H), (0, 0, 0))\n",
+            "                # Use Generator for noise to respect seed properly on all devices\n",
+            latent_ref_replacement,
+        )
+    replace_text(
         file_path,
         "                z_shape_ref = self.ae.encode(img_tensor)\n                z_shape_ref = self.ae.encode(img_tensor)\n",
+        "                z_shape_ref = self.ae.encode(img_tensor)\n",
     )
-    remove_text(
+    replace_text(
         file_path,
         "                z_shape_ref = self.ae.encode(img_tensor)\n                z_shape_ref = self.ae.encode(img_tensor)\n                \n",
+        "                z_shape_ref = self.ae.encode(img_tensor)\n\n",
     )
 
 
