@@ -109,7 +109,7 @@ Validated default public sources currently used:
 
 - LTX2 GGUF: `unsloth/LTX-2-GGUF` (`Q4_K_M`, `Q6_K`)
 - Flux2 Klein GGUF: `unsloth/FLUX.2-klein-9B-GGUF` (`Q4_K_M`, `Q8_0`)
-- Flux2 AE (native): `Kijai/flux-fp8` (`flux-vae-bf16.safetensors` saved as `backend/models/flux2/ae.safetensors`)
+- Flux2 AE (native): `dci05049/flux2-klein-9b` (`flux2-vae.safetensors` saved as `backend/models/flux2/ae.safetensors`)
 - SAM3 checkpoint: `1038lab/sam3` (`sam3.pt`)
 - Gemma3 text encoder (LTX compatible): `unsloth/gemma-3-4b-it` (safetensors shards + tokenizer/processor files)
 

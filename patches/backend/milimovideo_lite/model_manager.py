@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Optional
 
 import requests
 from huggingface_hub import hf_hub_url
+from safetensors import safe_open
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,8 @@ DEFAULT_MANIFEST: List[ModelSpec] = [
     ),
     ModelSpec(
         key="flux2_ae_native",
-        repo_id=os.environ.get("MILIMO_FLUX2_AE_REPO", "Kijai/flux-fp8"),
-        filename=os.environ.get("MILIMO_FLUX2_AE_FILE", "flux-vae-bf16.safetensors"),
+        repo_id=os.environ.get("MILIMO_FLUX2_AE_REPO", "dci05049/flux2-klein-9b"),
+        filename=os.environ.get("MILIMO_FLUX2_AE_FILE", "flux2-vae.safetensors"),
         out_rel_path="flux2/ae.safetensors",
         sha256=os.environ.get("MILIMO_FLUX2_AE_SHA256") or None,
         quant="bf16",
@@ -189,6 +190,20 @@ def _verify_checksum(path: Path, expected: Optional[str]) -> bool:
     return actual.lower() == expected.lower()
 
 
+def _is_flux2_ae_compatible(path: Path) -> bool:
+    """Validate Flux2 Klein AE architecture to avoid loading incompatible VAE files."""
+    try:
+        with safe_open(str(path), framework="pt", device="cpu") as f:
+            needed = ("encoder.quant_conv.weight", "encoder.conv_out.weight", "decoder.conv_in.weight")
+            if not all(k in f.keys() for k in needed):
+                return False
+            enc_shape = tuple(f.get_tensor("encoder.conv_out.weight").shape)
+            dec_shape = tuple(f.get_tensor("decoder.conv_in.weight").shape)
+            return enc_shape[:2] == (64, 512) and dec_shape[:2] == (512, 32)
+    except Exception:
+        return False
+
+
 def _remote_size(url: str) -> Optional[int]:
     try:
         r = requests.head(url, headers=_headers(), timeout=30, allow_redirects=True)
@@ -263,16 +278,29 @@ def ensure_models(models_root: str, mode: str = "low") -> Dict[str, str]:
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         if out_path.exists() and _verify_checksum(out_path, spec.sha256):
-            logger.info("Model present: %s", out_path)
-            resolved[spec.key] = str(out_path)
-            manifest_json[spec.key] = {
-                "path": str(out_path),
-                "repo_id": spec.repo_id,
-                "filename": spec.filename,
-                "quant": spec.quant or "",
-                "status": "present",
-            }
-            continue
+            if spec.key == "flux2_ae_native" and not _is_flux2_ae_compatible(out_path):
+                logger.warning("Incompatible Flux2 AE detected at %s. Re-downloading compatible checkpoint.", out_path)
+                try:
+                    out_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                part = out_path.with_suffix(out_path.suffix + ".part")
+                try:
+                    part.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                # Continue to download branch below.
+            else:
+                logger.info("Model present: %s", out_path)
+                resolved[spec.key] = str(out_path)
+                manifest_json[spec.key] = {
+                    "path": str(out_path),
+                    "repo_id": spec.repo_id,
+                    "filename": spec.filename,
+                    "quant": spec.quant or "",
+                    "status": "present",
+                }
+                continue
 
         url = hf_hub_url(spec.repo_id, spec.filename)
         try:
