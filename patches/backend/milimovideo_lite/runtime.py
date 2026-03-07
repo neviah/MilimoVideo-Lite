@@ -112,9 +112,18 @@ def adjust_video_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     tuned.update(result.get("settings", {}))
 
     # Keep endpoint schema untouched and constrain backend resource profile only.
-    tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 40), 40), 28)
-    tuned["width"] = min(_safe_int(tuned.get("width", 768), 768), 960)
-    tuned["height"] = min(_safe_int(tuned.get("height", 512), 512), 544)
+    tuned["num_inference_steps"] = min(
+        _safe_int(tuned.get("num_inference_steps", 40), 40),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_STEPS", 24), 24),
+    )
+    tuned["width"] = min(
+        _safe_int(tuned.get("width", 768), 768),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_WIDTH", 768), 768),
+    )
+    tuned["height"] = min(
+        _safe_int(tuned.get("height", 512), 512),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_VIDEO_MAX_HEIGHT", 432), 432),
+    )
 
     # Temporal chunking and latent tiling are injected as planner metadata.
     chunk_size = _safe_int(tuned.get("temporal_chunk_size", 6), 6)
@@ -124,6 +133,12 @@ def adjust_video_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     if mode == "cpu":
         tuned["device"] = "cpu"
         tuned["enable_cpu_offload"] = True
+        tuned["width"] = min(tuned["width"], _safe_int(os.environ.get("MILIMO_CPU_VIDEO_MAX_WIDTH", 512), 512))
+        tuned["height"] = min(tuned["height"], _safe_int(os.environ.get("MILIMO_CPU_VIDEO_MAX_HEIGHT", 320), 320))
+        tuned["num_inference_steps"] = min(
+            tuned["num_inference_steps"],
+            _safe_int(os.environ.get("MILIMO_CPU_VIDEO_MAX_STEPS", 16), 16),
+        )
 
     return tuned
 

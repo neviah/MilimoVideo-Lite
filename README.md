@@ -70,6 +70,7 @@ Low mode applies backend-only tuning while preserving endpoint contracts:
   - temporal chunk windows (default 4-8)
   - latent tiling (`2x2` or `3x3`) + tile stitching helpers
   - CPU offload flag
+  - low-VRAM auto caps for video generation defaults: `768x432`, `24` steps
 - Flux pathway:
   - backend class: `LowVRAMFluxBackend`
   - quantization: 4-bit or 8-bit
@@ -133,6 +134,7 @@ Validated default public sources currently used:
 - Backend launch sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default to reduce allocator fragmentation.
 - Override low-VRAM image caps with: `MILIMO_LOWVRAM_IMAGE_MAX_WIDTH`, `MILIMO_LOWVRAM_IMAGE_MAX_HEIGHT`, `MILIMO_LOWVRAM_IMAGE_MAX_STEPS`.
 - Override low-VRAM element visual caps with: `MILIMO_LOWVRAM_ELEMENT_MAX_WIDTH`, `MILIMO_LOWVRAM_ELEMENT_MAX_HEIGHT`, `MILIMO_LOWVRAM_ELEMENT_MAX_STEPS`.
+- Override low-VRAM video caps with: `MILIMO_LOWVRAM_VIDEO_MAX_WIDTH`, `MILIMO_LOWVRAM_VIDEO_MAX_HEIGHT`, `MILIMO_LOWVRAM_VIDEO_MAX_STEPS`.
 
 If you override with gated/private repos, set `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`.
 
