@@ -86,6 +86,28 @@ def patch_flux_wrapper(backend_dir: Path) -> None:
     if not file_path.exists():
         return
 
+    load_model_gate_replacement = (
+        "    def load_model(self, enable_ae=True):\n"
+        "        # In Lite mode we keep a single loaded Flux model to avoid OOM from repeated reloads.\n"
+        "        if self.model_loaded:\n"
+        "            if self.last_ae_enable_request != enable_ae:\n"
+        "                logger.info(\n"
+        "                    f\"AE Mode Changed (requested {self.last_ae_enable_request} -> {enable_ae}). Keeping loaded model to avoid VRAM reload.\"\n"
+        "                )\n"
+        "                self.last_ae_enable_request = enable_ae\n"
+        "            return\n"
+        "\n"
+        "        self.last_ae_enable_request = enable_ae\n"
+        "        logger.info(f\"Loading Flux 2 (Klein) Model on {self.device}. Native AE: {enable_ae}\")\n"
+        "\n"
+    )
+    replace_region(
+        file_path,
+        "    def load_model(self, enable_ae=True):\n",
+        "        # Unload conflicting models (e.g., LTX) before loading Flux\n",
+        load_model_gate_replacement,
+    )
+
     qwen_replacement = (
         "            # Set Qwen paths\n"
         "            qwen_path = os.path.join(base_path, \"text_encoder\")\n"
