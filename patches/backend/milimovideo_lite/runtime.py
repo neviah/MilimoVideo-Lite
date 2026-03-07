@@ -140,9 +140,65 @@ def adjust_image_params_for_mode(params: Dict[str, Any]) -> Dict[str, Any]:
     planner = router.image_pipeline()
     result = planner.generate_image(tuned.get("prompt", ""), tuned)
     tuned.update(result.get("settings", {}))
-    tuned["num_inference_steps"] = min(_safe_int(tuned.get("num_inference_steps", 25), 25), 20)
+    tuned["num_inference_steps"] = min(
+        _safe_int(tuned.get("num_inference_steps", 25), 25),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_STEPS", 8), 8),
+    )
+    tuned["width"] = min(
+        _safe_int(tuned.get("width", 1024), 1024),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_WIDTH", 640), 640),
+    )
+    tuned["height"] = min(
+        _safe_int(tuned.get("height", 1024), 1024),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_IMAGE_MAX_HEIGHT", 640), 640),
+    )
     tuned["enable_ae"] = True
     tuned["enable_true_cfg"] = False
+
+    if mode == "cpu":
+        tuned["width"] = min(tuned["width"], _safe_int(os.environ.get("MILIMO_CPU_IMAGE_MAX_WIDTH", 384), 384))
+        tuned["height"] = min(tuned["height"], _safe_int(os.environ.get("MILIMO_CPU_IMAGE_MAX_HEIGHT", 384), 384))
+        tuned["num_inference_steps"] = min(
+            tuned["num_inference_steps"],
+            _safe_int(os.environ.get("MILIMO_CPU_IMAGE_MAX_STEPS", 6), 6),
+        )
+
+    return tuned
+
+
+def adjust_element_visual_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Tune element/character visual generation for low-VRAM systems."""
+    bootstrap_lite_runtime()
+    tuned = dict(params)
+
+    router = get_router()
+    mode = router.current_mode()
+    if mode == "high":
+        tuned.setdefault("num_inference_steps", _safe_int(os.environ.get("MILIMO_ELEMENT_DEFAULT_STEPS", 12), 12))
+        tuned.setdefault("width", _safe_int(os.environ.get("MILIMO_ELEMENT_DEFAULT_WIDTH", 768), 768))
+        tuned.setdefault("height", _safe_int(os.environ.get("MILIMO_ELEMENT_DEFAULT_HEIGHT", 768), 768))
+        return tuned
+
+    tuned["num_inference_steps"] = min(
+        _safe_int(tuned.get("num_inference_steps", 25), 25),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_STEPS", 6), 6),
+    )
+    tuned["width"] = min(
+        _safe_int(tuned.get("width", 1024), 1024),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_WIDTH", 512), 512),
+    )
+    tuned["height"] = min(
+        _safe_int(tuned.get("height", 1024), 1024),
+        _safe_int(os.environ.get("MILIMO_LOWVRAM_ELEMENT_MAX_HEIGHT", 512), 512),
+    )
+
+    if mode == "cpu":
+        tuned["width"] = min(tuned["width"], _safe_int(os.environ.get("MILIMO_CPU_ELEMENT_MAX_WIDTH", 384), 384))
+        tuned["height"] = min(tuned["height"], _safe_int(os.environ.get("MILIMO_CPU_ELEMENT_MAX_HEIGHT", 384), 384))
+        tuned["num_inference_steps"] = min(
+            tuned["num_inference_steps"],
+            _safe_int(os.environ.get("MILIMO_CPU_ELEMENT_MAX_STEPS", 4), 4),
+        )
 
     return tuned
 

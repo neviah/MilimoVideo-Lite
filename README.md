@@ -77,6 +77,8 @@ Low mode applies backend-only tuning while preserving endpoint contracts:
   - tiled VAE encode/decode
   - latent tiling and tile stitching support
   - CPU offload flag
+  - low-VRAM auto caps for image generation defaults: `640x640`, `8` steps
+  - low-VRAM auto caps for element/character visuals defaults: `512x512`, `6` steps
 - SAM pathway:
   - backend class: `LowVRAMSAMBackend`
   - 8-bit quantized runtime intent
@@ -129,6 +131,8 @@ Validated default public sources currently used:
 - On Windows CUDA without Triton, Flux text encoder defaults to a non-FP8 compatible model (`Qwen/Qwen3-8B`) on CPU.
 - Override behavior with `MILIMO_QWEN3_CUDA_NO_TRITON_PATH` and `MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE`.
 - Backend launch sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default to reduce allocator fragmentation.
+- Override low-VRAM image caps with: `MILIMO_LOWVRAM_IMAGE_MAX_WIDTH`, `MILIMO_LOWVRAM_IMAGE_MAX_HEIGHT`, `MILIMO_LOWVRAM_IMAGE_MAX_STEPS`.
+- Override low-VRAM element visual caps with: `MILIMO_LOWVRAM_ELEMENT_MAX_WIDTH`, `MILIMO_LOWVRAM_ELEMENT_MAX_HEIGHT`, `MILIMO_LOWVRAM_ELEMENT_MAX_STEPS`.
 
 If you override with gated/private repos, set `HF_TOKEN` or `HUGGINGFACE_HUB_TOKEN`.
 

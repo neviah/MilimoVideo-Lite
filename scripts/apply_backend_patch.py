@@ -81,6 +81,51 @@ def patch_image_task(backend_dir: Path) -> None:
     )
 
 
+def patch_element_manager(backend_dir: Path) -> None:
+    file_path = backend_dir / "managers" / "element_manager.py"
+    if not file_path.exists():
+        return
+
+    text = file_path.read_text(encoding="utf-8")
+    if "from milimovideo_lite.runtime import adjust_element_visual_params\n" not in text:
+        if "from models import Element, Asset\n" in text:
+            patch_once(
+                file_path,
+                "from models import Element, Asset\n",
+                "from milimovideo_lite.runtime import adjust_element_visual_params\n",
+            )
+        elif "from database import engine, Element, Project, Asset\n" in text:
+            patch_once(
+                file_path,
+                "from database import engine, Element, Project, Asset\n",
+                "from milimovideo_lite.runtime import adjust_element_visual_params\n",
+            )
+        else:
+            raise RuntimeError(f"Could not patch {file_path}: expected import anchor not found")
+
+    patch_once(
+        file_path,
+        "        logger.info(f\"Generating visual for Element {element.name} ({element.id})\")\n",
+        "        visual_params = adjust_element_visual_params({\"width\": 1024, \"height\": 1024, \"num_inference_steps\": 25})\n",
+    )
+
+    replace_text(
+        file_path,
+        "                width=1024,\n",
+        "                width=visual_params.get(\"width\", 1024),\n",
+    )
+    replace_text(
+        file_path,
+        "                height=1024,\n",
+        "                height=visual_params.get(\"height\", 1024),\n",
+    )
+    patch_once(
+        file_path,
+        "                guidance=guidance,\n",
+        "                num_inference_steps=visual_params.get(\"num_inference_steps\", 25),\n",
+    )
+
+
 def patch_flux_wrapper(backend_dir: Path) -> None:
     file_path = backend_dir / "models" / "flux_wrapper.py"
     if not file_path.exists():
@@ -507,6 +552,7 @@ def main() -> None:
 
     patch_video_task(backend_dir)
     patch_image_task(backend_dir)
+    patch_element_manager(backend_dir)
     patch_flux_wrapper(backend_dir)
     patch_model_engine(backend_dir)
     patch_storyboard_routes(backend_dir)
