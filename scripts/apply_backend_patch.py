@@ -64,6 +64,57 @@ def patch_video_task(backend_dir: Path) -> None:
 
 def patch_image_task(backend_dir: Path) -> None:
     file_path = backend_dir / "tasks" / "image.py"
+
+    def _repair_broken_flux_override_in_image_task() -> None:
+        text = file_path.read_text(encoding="utf-8")
+        marker = "img = flux_inpainter.generate_image("
+        start = text.find(marker)
+        if start < 0:
+            return
+
+        save_anchor = text.find("             # Save", start)
+        if save_anchor < 0:
+            return
+
+        call_chunk = text[start:save_anchor]
+        misplaced = "flux_model_path = params.get(\"flux_model_path\")" in call_chunk
+        if not misplaced:
+            return
+
+        lines = call_chunk.splitlines(keepends=True)
+        cleaned: list[str] = []
+        skip_logger = False
+        for ln in lines:
+            stripped = ln.strip()
+            if stripped.startswith("flux_model_path = params.get("):
+                continue
+            if stripped.startswith("prev_flux_model_path = os.environ.get("):
+                continue
+            if stripped.startswith("if isinstance(flux_model_path, str) and flux_model_path:"):
+                skip_logger = True
+                continue
+            if skip_logger and stripped.startswith("os.environ[\"KLEIN_9B_MODEL_PATH\"]"):
+                continue
+            if skip_logger and stripped.startswith("logger.info("):
+                skip_logger = False
+                continue
+            if stripped == "" and skip_logger:
+                continue
+            cleaned.append(ln)
+
+        indent = "             "
+        prefix = (
+            f"{indent}flux_model_path = params.get(\"flux_model_path\")\n"
+            f"{indent}prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n"
+            f"{indent}if isinstance(flux_model_path, str) and flux_model_path:\n"
+            f"{indent}    os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n"
+            f"{indent}    logger.info(f\"Using low-VRAM Flux model path override: {{flux_model_path}}\")\n\n"
+        )
+        fixed_chunk = prefix + "".join(cleaned)
+        file_path.write_text(text[:start] + fixed_chunk + text[save_anchor:], encoding="utf-8")
+
+    _repair_broken_flux_override_in_image_task()
+
     patch_once(
         file_path,
         "logger = logging.getLogger(__name__)\n",
