@@ -190,6 +190,21 @@ def patch_image_task(backend_dir: Path) -> None:
         run_flux_replacement,
     )
 
+    # Guard against historical bad injections that duplicated the Flux run call.
+    replace_text(
+        file_path,
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n"
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n"
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n",
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n",
+    )
+    replace_text(
+        file_path,
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n"
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n",
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n",
+    )
+
 
 def patch_element_manager(backend_dir: Path) -> None:
     file_path = backend_dir / "managers" / "element_manager.py"
