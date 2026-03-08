@@ -65,56 +65,6 @@ def patch_video_task(backend_dir: Path) -> None:
 def patch_image_task(backend_dir: Path) -> None:
     file_path = backend_dir / "tasks" / "image.py"
 
-    def _repair_broken_flux_override_in_image_task() -> None:
-        text = file_path.read_text(encoding="utf-8")
-        marker = "img = flux_inpainter.generate_image("
-        start = text.find(marker)
-        if start < 0:
-            return
-
-        save_anchor = text.find("             # Save", start)
-        if save_anchor < 0:
-            return
-
-        call_chunk = text[start:save_anchor]
-        misplaced = "flux_model_path = params.get(\"flux_model_path\")" in call_chunk
-        if not misplaced:
-            return
-
-        lines = call_chunk.splitlines(keepends=True)
-        cleaned: list[str] = []
-        skip_logger = False
-        for ln in lines:
-            stripped = ln.strip()
-            if stripped.startswith("flux_model_path = params.get("):
-                continue
-            if stripped.startswith("prev_flux_model_path = os.environ.get("):
-                continue
-            if stripped.startswith("if isinstance(flux_model_path, str) and flux_model_path:"):
-                skip_logger = True
-                continue
-            if skip_logger and stripped.startswith("os.environ[\"KLEIN_9B_MODEL_PATH\"]"):
-                continue
-            if skip_logger and stripped.startswith("logger.info("):
-                skip_logger = False
-                continue
-            if stripped == "" and skip_logger:
-                continue
-            cleaned.append(ln)
-
-        indent = "             "
-        prefix = (
-            f"{indent}flux_model_path = params.get(\"flux_model_path\")\n"
-            f"{indent}prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n"
-            f"{indent}if isinstance(flux_model_path, str) and flux_model_path:\n"
-            f"{indent}    os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n"
-            f"{indent}    logger.info(f\"Using low-VRAM Flux model path override: {{flux_model_path}}\")\n\n"
-        )
-        fixed_chunk = prefix + "".join(cleaned)
-        file_path.write_text(text[:start] + fixed_chunk + text[save_anchor:], encoding="utf-8")
-
-    _repair_broken_flux_override_in_image_task()
-
     patch_once(
         file_path,
         "logger = logging.getLogger(__name__)\n",
@@ -130,22 +80,82 @@ def patch_image_task(backend_dir: Path) -> None:
         "    params = adjust_image_params_for_mode(params)\n",
         "    before_image_task(job_id, params)\n",
     )
-    # Repair previously injected broken syntax where override lines were inserted inside
-    # the generate_image(...) argument list.
-    replace_text(
-        file_path,
-        "             img = flux_inpainter.generate_image(\n             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n",
-        "             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n             img = flux_inpainter.generate_image(\n",
+    run_flux_replacement = (
+        "        def _run_flux():\n"
+        "             def flux_callback(step, total):\n"
+        "                 if job_id in active_jobs:\n"
+        "                     try:\n"
+        "                         progress_pct = (step / total) * 100\n"
+        "                         msg = f\"Generating Image ({step}/{total})\"\n"
+        "                         active_jobs[job_id][\"progress\"] = int(progress_pct)\n"
+        "                         active_jobs[job_id][\"status_message\"] = msg\n"
+        "                         if active_jobs[job_id].get(\"cancelled\", False):\n"
+        "                             raise RuntimeError(f\"Job {job_id} cancelled by user.\")\n"
+        "\n"
+        "                         # Allow pure cancellation check without clearing status\n"
+        "                         if step >= 0:\n"
+        "                            # Must run in asyncio thread\n"
+        "                            asyncio.run_coroutine_threadsafe(\n"
+        "                                broadcast_progress(job_id, active_jobs[job_id][\"progress\"], \"processing\", active_jobs[job_id][\"status_message\"]),\n"
+        "                                loop\n"
+        "                            )\n"
+        "                     except Exception as e:\n"
+        "                         if \"cancelled\" in str(e).lower():\n"
+        "                             raise  # Rethrow so outer block catches it\n"
+        "                         logger.error(f\"Error in flux callback: {e}\")\n"
+        "\n"
+        "             flux_model_path = params.get(\"flux_model_path\")\n"
+        "             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n"
+        "             if isinstance(flux_model_path, str) and flux_model_path:\n"
+        "                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n"
+        "                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n"
+        "\n"
+        "             try:\n"
+        "                 img = flux_inpainter.generate_image(\n"
+        "                     prompt=prompt,\n"
+        "                     width=width,\n"
+        "                     height=height,\n"
+        "                     guidance=cfg_scale,\n"
+        "                     num_inference_steps=steps,\n"
+        "                     ip_adapter_images=element_images,\n"
+        "                     callback=flux_callback,\n"
+        "                     seed=seed,\n"
+        "                     negative_prompt=negative_prompt,\n"
+        "                     enable_ae=enable_ae,\n"
+        "                     enable_true_cfg=enable_true_cfg\n"
+        "                 )\n"
+        "             finally:\n"
+        "                 if prev_flux_model_path is None:\n"
+        "                     os.environ.pop(\"KLEIN_9B_MODEL_PATH\", None)\n"
+        "                 else:\n"
+        "                     os.environ[\"KLEIN_9B_MODEL_PATH\"] = prev_flux_model_path\n"
+        "\n"
+        "             # Save\n"
+        "             if not project_id:\n"
+        "                 raise ValueError(\"project_id required\")\n"
+        "\n"
+        "             paths = get_project_output_paths(job_id, project_id)\n"
+        "             out_path = paths[\"output_path\"].replace(\".mp4\", \".jpg\")\n"
+        "             thumb_path = paths[\"thumbnail_path\"]\n"
+        "\n"
+        "             os.makedirs(os.path.dirname(out_path), exist_ok=True)\n"
+        "             os.makedirs(os.path.dirname(thumb_path), exist_ok=True)\n"
+        "\n"
+        "             img.save(out_path, quality=95)\n"
+        "             img.resize((round(width/4), round(height/4))).save(thumb_path)\n"
+        "\n"
+        "             web_url = f\"/projects/{project_id}/generated/{os.path.basename(out_path)}\"\n"
+        "             web_thumb = f\"/projects/{project_id}/thumbnails/{os.path.basename(thumb_path)}\"\n"
+        "\n"
+        "             return web_url, web_thumb\n"
+        "\n"
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n"
     )
-    patch_once(
+    replace_region(
         file_path,
-        "             img = flux_inpainter.generate_image(\n",
-        "             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n",
-    )
-    patch_once(
-        file_path,
-        "             # Save\n",
-        "             if prev_flux_model_path is None:\n                 os.environ.pop(\"KLEIN_9B_MODEL_PATH\", None)\n             else:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = prev_flux_model_path\n\n",
+        "        def _run_flux():\n",
+        "        web_url, web_thumb = await loop.run_in_executor(None, _run_flux)\n",
+        run_flux_replacement,
     )
 
 
