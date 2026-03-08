@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
-import sys
 from typing import Any, Dict, Optional
 
 import config
@@ -260,8 +258,7 @@ def ensure_video_runtime_ready() -> None:
     Strategy:
     - If GGUF runtime import is available, proceed.
     - Else if full/fp8 LTX checkpoint exists, proceed.
-    - Else attempt a best-effort install of llama-cpp-python.
-    - If still unavailable, raise a clear actionable error.
+    - If none are available, raise a clear actionable error.
     """
     bootstrap_lite_runtime()
     mode = _MODE_CACHE or resolve_runtime_mode()
@@ -281,32 +278,17 @@ def ensure_video_runtime_ready() -> None:
     except Exception:
         has_unsloth = False
 
-    ckpt_full = os.path.join(config.LTX_DIR, "models", "checkpoints", "ltx-2-19b-distilled.safetensors")
-    ckpt_fp8 = os.path.join(config.LTX_DIR, "models", "checkpoints", "ltx-2-19b-distilled-fp8.safetensors")
+    ckpt_full = os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled.safetensors")
+    ckpt_fp8 = os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled-fp8.safetensors")
     has_checkpoint = os.path.exists(ckpt_full) or os.path.exists(ckpt_fp8)
 
     if has_llama or has_unsloth or has_checkpoint:
         return
 
-    # Best-effort self-heal for common Windows installs where optional deps were skipped.
-    try:
-        logger.warning("Low-VRAM video preflight: GGUF runtime missing and no LTX checkpoint found. Trying llama-cpp-python install...")
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--prefer-binary", "llama-cpp-python"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        import llama_cpp  # type: ignore  # noqa: F401
-        logger.info("Low-VRAM video preflight: installed/validated llama-cpp-python runtime")
-        return
-    except Exception:
-        pass
-
     raise RuntimeError(
         "Video generation prerequisites are missing: neither GGUF runtime (llama_cpp/unsloth) nor "
-        "LTX checkpoint (ltx-2-19b-distilled.safetensors) is available. "
-        "Run Reinstall to install optional runtime dependencies automatically."
+        "LTX checkpoint is available under backend/models/ltx2. "
+        "Run Update/Reinstall and allow model auto-download to complete."
     )
 
 

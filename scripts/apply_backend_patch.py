@@ -558,6 +558,32 @@ def patch_model_engine(backend_dir: Path) -> None:
         "            \"gemma_root\": os.path.join(config.BACKEND_DIR, \"models\", \"text_encoders\", \"gemma3\"),\n",
     )
 
+    replace_text(
+        file_path,
+        "        ckpt_full = os.path.join(models_dir, \"checkpoints\", \"ltx-2-19b-distilled.safetensors\")\n",
+        "        ckpt_full = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled.safetensors\")\n",
+    )
+    replace_text(
+        file_path,
+        "        ckpt_fp8 = os.path.join(models_dir, \"checkpoints\", \"ltx-2-19b-distilled-fp8.safetensors\")\n",
+        "        ckpt_fp8 = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled-fp8.safetensors\")\n",
+    )
+    replace_text(
+        file_path,
+        "            \"distilled_lora_path\": os.path.join(models_dir, \"checkpoints\", \"ltx-2-19b-distilled-lora-384.safetensors\"), \n",
+        "            \"distilled_lora_path\": os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled-lora-384.safetensors\"), \n",
+    )
+    replace_text(
+        file_path,
+        "            \"spatial_upsampler_path\": os.path.join(models_dir, \"upscalers\", \"ltx-2-spatial-upscaler-x2-1.0.safetensors\"),\n",
+        "            \"spatial_upsampler_path\": os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-spatial-upscaler-x2-1.0.safetensors\"),\n",
+    )
+    replace_text(
+        file_path,
+        "            \"temporal_upsampler_path\": os.path.join(models_dir, \"upscalers\", \"ltx-2-temporal-upscaler-x2-1.0.safetensors\"),\n",
+        "            \"temporal_upsampler_path\": os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-temporal-upscaler-x2-1.0.safetensors\"),\n",
+    )
+
     fp8_block_old = (
         "            is_mps = (device == \"mps\")\n"
         "            fp8 = False if is_mps else True \n"
@@ -577,6 +603,32 @@ def patch_model_engine(backend_dir: Path) -> None:
         "                    fp8 = False\n"
     )
     patch_once(file_path, fp8_block_old, fp8_block_new)
+
+    # Normalize LTX asset paths to backend/models/ltx2 regardless of line endings.
+    text = file_path.read_text(encoding="utf-8")
+    updated = text
+    updated = updated.replace(
+        'os.path.join(models_dir, "checkpoints", "ltx-2-19b-distilled.safetensors")',
+        'os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled.safetensors")',
+    )
+    updated = updated.replace(
+        'os.path.join(models_dir, "checkpoints", "ltx-2-19b-distilled-fp8.safetensors")',
+        'os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled-fp8.safetensors")',
+    )
+    updated = updated.replace(
+        'os.path.join(models_dir, "checkpoints", "ltx-2-19b-distilled-lora-384.safetensors")',
+        'os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled-lora-384.safetensors")',
+    )
+    updated = updated.replace(
+        'os.path.join(models_dir, "upscalers", "ltx-2-spatial-upscaler-x2-1.0.safetensors")',
+        'os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-spatial-upscaler-x2-1.0.safetensors")',
+    )
+    updated = updated.replace(
+        'os.path.join(models_dir, "upscalers", "ltx-2-temporal-upscaler-x2-1.0.safetensors")',
+        'os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-temporal-upscaler-x2-1.0.safetensors")',
+    )
+    if updated != text:
+        file_path.write_text(updated, encoding="utf-8")
 
 
 def patch_storyboard_routes(backend_dir: Path) -> None:
