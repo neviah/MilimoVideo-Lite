@@ -48,11 +48,26 @@ def patch_video_task(backend_dir: Path) -> None:
     patch_once(
         file_path,
         "logger = logging.getLogger(__name__)\n",
-        "\nfrom milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task\n",
+        "\nfrom milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task, ensure_video_runtime_ready\n",
+    )
+    replace_text(
+        file_path,
+        "from milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task\n",
+        "from milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task, ensure_video_runtime_ready\n",
+    )
+    replace_text(
+        file_path,
+        "from milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task, ensure_video_runtime_ready\n\nfrom milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task, ensure_video_runtime_ready\n",
+        "from milimovideo_lite.runtime import adjust_video_params_for_mode, before_video_task, ensure_video_runtime_ready\n",
     )
     patch_once(
         file_path,
         "    update_job_db(job_id, \"processing\")\n",
+        "    ensure_video_runtime_ready()\n",
+    )
+    patch_once(
+        file_path,
+        "    ensure_video_runtime_ready()\n",
         "    params = adjust_video_params_for_mode(params)\n",
     )
     patch_once(
@@ -60,6 +75,8 @@ def patch_video_task(backend_dir: Path) -> None:
         "    params = adjust_video_params_for_mode(params)\n",
         "    before_video_task(job_id, params)\n",
     )
+    replace_text(file_path, "logger.info(f\"✓ Path exists: {resolved_abs}\")", "logger.info(f\"[OK] Path exists: {resolved_abs}\")")
+    replace_text(file_path, "logger.warning(f\"✗ Raw path not found: {path} (resolved as {resolved_abs})\")", "logger.warning(f\"[MISSING] Raw path not found: {path} (resolved as {resolved_abs})\")")
 
 
 def patch_image_task(backend_dir: Path) -> None:

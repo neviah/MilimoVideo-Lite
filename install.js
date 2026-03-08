@@ -35,7 +35,7 @@ module.exports = {
           "python scripts/ensure_torch_cuda.py",
           "python -m pip install bitsandbytes || echo Optional bitsandbytes install skipped",
           "python -m pip install flash-attn || echo Optional flash-attn install skipped",
-          "python -m pip install llama-cpp-python || echo Optional llama-cpp-python install skipped",
+          "python -m pip install --prefer-binary llama-cpp-python || echo Optional llama-cpp-python install skipped",
           "python -m pip install unsloth || echo Optional unsloth install skipped",
           "python scripts/apply_backend_patch.py sandbox/workspace/milimovideo",
           "npm --prefix sandbox/workspace/milimovideo/web-app install --include=dev",

@@ -9,6 +9,8 @@ module.exports = {
           "if not exist sandbox\\workspace\\milimovideo echo MilimoVideo not installed. Run install first. && exit /b 1",
           "git -C sandbox/workspace/milimovideo pull --ff-only",
           "python scripts/ensure_torch_cuda.py",
+          "python -m pip install --prefer-binary llama-cpp-python || echo Optional llama-cpp-python install skipped",
+          "python -m pip install unsloth || echo Optional unsloth install skipped",
           "python scripts/apply_backend_patch.py sandbox/workspace/milimovideo",
           "echo MilimoVideo-Lite updated"
         ]
