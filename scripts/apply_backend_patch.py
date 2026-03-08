@@ -79,6 +79,13 @@ def patch_image_task(backend_dir: Path) -> None:
         "    params = adjust_image_params_for_mode(params)\n",
         "    before_image_task(job_id, params)\n",
     )
+    # Repair previously injected broken syntax where override lines were inserted inside
+    # the generate_image(...) argument list.
+    replace_text(
+        file_path,
+        "             img = flux_inpainter.generate_image(\n             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n",
+        "             flux_model_path = params.get(\"flux_model_path\")\n             prev_flux_model_path = os.environ.get(\"KLEIN_9B_MODEL_PATH\")\n             if isinstance(flux_model_path, str) and flux_model_path:\n                 os.environ[\"KLEIN_9B_MODEL_PATH\"] = flux_model_path\n                 logger.info(f\"Using low-VRAM Flux model path override: {flux_model_path}\")\n\n             img = flux_inpainter.generate_image(\n",
+    )
     patch_once(
         file_path,
         "             img = flux_inpainter.generate_image(\n",
