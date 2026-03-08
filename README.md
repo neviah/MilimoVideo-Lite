@@ -10,7 +10,7 @@ MilimoVideo-Lite is a Pinokio app wrapper for [mainza-ai/milimovideo](https://gi
 - Applies backend patch files only (frontend untouched)
 - Starts backend API and existing frontend UI together
 - Keeps all runtime data under `sandbox/` only
-- Automatically checks and downloads required models into `backend/models` when backend starts
+- Uses on-demand model downloads: assets are fetched when the related feature (image/video/element) is first used
 
 ## Pinokio Files
 
@@ -87,12 +87,18 @@ Low mode applies backend-only tuning while preserving endpoint contracts:
 
 ## Model Downloading
 
-At backend startup, model manager:
+Model manager:
 
 - checks `backend/models`
-- downloads missing files from HuggingFace with resume enabled
+- downloads missing files from HuggingFace with resume enabled only for features being used
 - verifies checksums when SHA256 env vars are provided
 - logs progress and download status to backend logs
+
+Startup download behavior:
+
+- Default is on-demand only (`MILIMO_ENABLE_STARTUP_MODEL_DOWNLOAD=0`).
+- You can force startup prefetch with `MILIMO_ENABLE_STARTUP_MODEL_DOWNLOAD=1`.
+- You can explicitly preload only certain keys with `MILIMO_STARTUP_MODEL_KEYS` (comma-separated manifest keys).
 
 Model source defaults are configurable via environment variables:
 
@@ -128,8 +134,8 @@ Validated default public sources currently used:
 
 - Install and update now run `python scripts/ensure_torch_cuda.py` to detect NVIDIA GPUs and switch PyTorch to a CUDA build when available.
 - If CUDA wheels cannot be resolved for your environment, the app falls back to CPU mode and logs a warning.
-- Video prerequisites are auto-managed in `backend/models/ltx2` (main checkpoint, distilled LoRA, and upscalers).
-- First run or first update after this change may take longer while large LTX2 video assets are downloaded.
+- Video prerequisites are auto-managed in `backend/models/ltx2` and downloaded when video generation is actually requested.
+- First video run may take longer while large LTX2 assets download.
 - You can override tried CUDA indexes with `MILIMO_TORCH_CUDA_INDEXES` (comma-separated URLs).
 - On Windows CUDA without Triton, Flux text encoder defaults to a non-FP8 compatible model (`Qwen/Qwen3-8B`) on CPU.
 - Override behavior with `MILIMO_QWEN3_CUDA_NO_TRITON_PATH` and `MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE`.

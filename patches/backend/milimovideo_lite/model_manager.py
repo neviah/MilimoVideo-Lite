@@ -315,19 +315,31 @@ def list_manifest() -> List[ModelSpec]:
 
 
 def _iter_needed(mode: str) -> Iterable[ModelSpec]:
+    startup_keys_raw = os.environ.get("MILIMO_STARTUP_MODEL_KEYS", "")
+    startup_keys = {k.strip() for k in startup_keys_raw.split(",") if k.strip()}
+    if startup_keys:
+        for spec in DEFAULT_MANIFEST:
+            if spec.key in startup_keys:
+                yield spec
+        return
+
+    # Default to true on-demand behavior: do not auto-pull large weights at startup.
+    if os.environ.get("MILIMO_ENABLE_STARTUP_MODEL_DOWNLOAD", "0") != "1":
+        return
+
     for spec in DEFAULT_MANIFEST:
         if mode in spec.required_for_modes or "low" in spec.required_for_modes:
             yield spec
 
 
-def ensure_models(models_root: str, mode: str = "low") -> Dict[str, str]:
+def _ensure_specs(models_root: str, specs: Iterable[ModelSpec]) -> Dict[str, str]:
     root = Path(models_root)
     root.mkdir(parents=True, exist_ok=True)
 
     resolved: Dict[str, str] = {}
     manifest_json: Dict[str, Dict[str, str]] = {}
 
-    for spec in _iter_needed(mode):
+    for spec in specs:
         out_path = root / spec.out_rel_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -343,7 +355,6 @@ def ensure_models(models_root: str, mode: str = "low") -> Dict[str, str]:
                     part.unlink(missing_ok=True)
                 except Exception:
                     pass
-                # Continue to download branch below.
             else:
                 logger.info("Model present: %s", out_path)
                 resolved[spec.key] = str(out_path)
@@ -387,8 +398,17 @@ def ensure_models(models_root: str, mode: str = "low") -> Dict[str, str]:
     idx_path = root / "milimovideo_lite_manifest.json"
     idx_path.write_text(json.dumps(manifest_json, indent=2), encoding="utf-8")
     logger.info("Wrote model manifest: %s", idx_path)
-
     return resolved
+
+
+def ensure_models(models_root: str, mode: str = "low") -> Dict[str, str]:
+    return _ensure_specs(models_root, _iter_needed(mode))
+
+
+def ensure_model_keys(models_root: str, keys: Iterable[str]) -> Dict[str, str]:
+    wanted = set(keys)
+    specs = [spec for spec in DEFAULT_MANIFEST if spec.key in wanted]
+    return _ensure_specs(models_root, specs)
 
 
 def select_quantized_model(resolved: Dict[str, str], family: str, prefer: str) -> Optional[str]:

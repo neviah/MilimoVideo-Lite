@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 import config
 
 from .model_manager import ensure_models
+from .model_manager import ensure_model_keys
 from .interfaces import PipelineRouter
 from .pipelines import HighVRAMPipeline, LowVRAMPipeline
 from .vram import get_total_vram_gb, get_vram_mode, resolve_runtime_mode
@@ -282,7 +283,32 @@ def ensure_video_runtime_ready() -> None:
     ckpt_fp8 = os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled-fp8.safetensors")
     has_checkpoint = os.path.exists(ckpt_full) or os.path.exists(ckpt_fp8)
 
-    if has_llama or has_unsloth or has_checkpoint:
+    models_root = os.path.join(config.BACKEND_DIR, "models")
+    if has_llama or has_unsloth:
+        # GGUF runtime path available: only ensure the primary low-vram video model.
+        pulled = ensure_model_keys(models_root, ["ltx2_gguf_q4_m"])
+        _MODELS_CACHE.update(pulled)
+        return
+
+    if has_checkpoint:
+        return
+
+    # No GGUF runtime path available: ensure classic LTX checkpoint stack on demand.
+    pulled = ensure_model_keys(
+        models_root,
+        [
+            "ltx2_checkpoint_main",
+            "ltx2_checkpoint_fp8",
+            "ltx2_distilled_lora",
+            "ltx2_spatial_upscaler",
+            "ltx2_temporal_upscaler",
+        ],
+    )
+    _MODELS_CACHE.update(pulled)
+
+    ckpt_full = os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled.safetensors")
+    ckpt_fp8 = os.path.join(config.BACKEND_DIR, "models", "ltx2", "ltx-2-19b-distilled-fp8.safetensors")
+    if os.path.exists(ckpt_full) or os.path.exists(ckpt_fp8):
         return
 
     raise RuntimeError(
@@ -292,5 +318,14 @@ def ensure_video_runtime_ready() -> None:
     )
 
 
+def ensure_image_runtime_ready() -> None:
+    """Ensure Flux essentials are present only when image-like generation is requested."""
+    bootstrap_lite_runtime()
+    models_root = os.path.join(config.BACKEND_DIR, "models")
+    pulled = ensure_model_keys(models_root, ["flux2_klein_safetensors", "flux2_ae_native"])
+    _MODELS_CACHE.update(pulled)
+
+
 def before_image_task(job_id: str, params: Dict[str, Any]) -> None:
+    ensure_image_runtime_ready()
     logger.info("MilimoVideo-Lite image task mode=%s job=%s", (_MODE_CACHE or resolve_runtime_mode()), job_id)

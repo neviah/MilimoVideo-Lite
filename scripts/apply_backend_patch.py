@@ -85,11 +85,26 @@ def patch_image_task(backend_dir: Path) -> None:
     patch_once(
         file_path,
         "logger = logging.getLogger(__name__)\n",
-        "\nfrom milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task\n",
+        "\nfrom milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task, ensure_image_runtime_ready\n",
+    )
+    replace_text(
+        file_path,
+        "from milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task\n",
+        "from milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task, ensure_image_runtime_ready\n",
+    )
+    replace_text(
+        file_path,
+        "from milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task, ensure_image_runtime_ready\n\nfrom milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task, ensure_image_runtime_ready\n",
+        "from milimovideo_lite.runtime import adjust_image_params_for_mode, before_image_task, ensure_image_runtime_ready\n",
     )
     patch_once(
         file_path,
         "    update_job_db(job_id, \"processing\")\n",
+        "    ensure_image_runtime_ready()\n",
+    )
+    patch_once(
+        file_path,
+        "    ensure_image_runtime_ready()\n",
         "    params = adjust_image_params_for_mode(params)\n",
     )
     patch_once(
@@ -182,26 +197,32 @@ def patch_element_manager(backend_dir: Path) -> None:
         return
 
     text = file_path.read_text(encoding="utf-8")
-    if "from milimovideo_lite.runtime import adjust_element_visual_params\n" not in text:
+    if "from milimovideo_lite.runtime import adjust_element_visual_params\n" not in text and "from milimovideo_lite.runtime import adjust_element_visual_params, ensure_image_runtime_ready\n" not in text:
         if "from models import Element, Asset\n" in text:
             patch_once(
                 file_path,
                 "from models import Element, Asset\n",
-                "from milimovideo_lite.runtime import adjust_element_visual_params\n",
+                "from milimovideo_lite.runtime import adjust_element_visual_params, ensure_image_runtime_ready\n",
             )
         elif "from database import engine, Element, Project, Asset\n" in text:
             patch_once(
                 file_path,
                 "from database import engine, Element, Project, Asset\n",
-                "from milimovideo_lite.runtime import adjust_element_visual_params\n",
+                "from milimovideo_lite.runtime import adjust_element_visual_params, ensure_image_runtime_ready\n",
             )
         else:
             raise RuntimeError(f"Could not patch {file_path}: expected import anchor not found")
 
+    replace_text(
+        file_path,
+        "from milimovideo_lite.runtime import adjust_element_visual_params\n",
+        "from milimovideo_lite.runtime import adjust_element_visual_params, ensure_image_runtime_ready\n",
+    )
+
     patch_once(
         file_path,
         "        logger.info(f\"Generating visual for Element {element.name} ({element.id})\")\n",
-        "        visual_params = adjust_element_visual_params({\"width\": 1024, \"height\": 1024, \"num_inference_steps\": 25})\n",
+        "        ensure_image_runtime_ready()\n        visual_params = adjust_element_visual_params({\"width\": 1024, \"height\": 1024, \"num_inference_steps\": 25})\n",
     )
 
     replace_text(
