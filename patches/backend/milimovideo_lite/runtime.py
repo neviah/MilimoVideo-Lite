@@ -53,6 +53,7 @@ def bootstrap_lite_runtime() -> None:
     configured = get_vram_mode()
     effective = resolve_runtime_mode()
     _MODE_CACHE = effective
+    os.environ["MILIMO_RUNTIME_EFFECTIVE_MODE"] = effective
 
     logger.info(
         "MilimoVideo-Lite runtime mode configured=%s effective=%s vram_gb=%s",
@@ -328,4 +329,10 @@ def ensure_image_runtime_ready() -> None:
 
 def before_image_task(job_id: str, params: Dict[str, Any]) -> None:
     ensure_image_runtime_ready()
+    mode = _MODE_CACHE or resolve_runtime_mode()
+    # Keep Qwen text encoder off GPU in low/cpu mode to prevent Flux load-time CUDA OOM.
+    if mode in {"low", "cpu"}:
+        os.environ.setdefault("MILIMO_QWEN3_TEXT_ENCODER_DEVICE", "cpu")
+    elif mode == "high":
+        os.environ.setdefault("MILIMO_QWEN3_TEXT_ENCODER_DEVICE", "cuda")
     logger.info("MilimoVideo-Lite image task mode=%s job=%s", (_MODE_CACHE or resolve_runtime_mode()), job_id)

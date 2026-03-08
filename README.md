@@ -136,9 +136,12 @@ Validated default public sources currently used:
 - If CUDA wheels cannot be resolved for your environment, the app falls back to CPU mode and logs a warning.
 - Video prerequisites are auto-managed in `backend/models/ltx2` and downloaded when video generation is actually requested.
 - First video run may take longer while large LTX2 assets download.
+- First image run can also take several minutes because Flux text-encoder weights are fetched on demand.
 - You can override tried CUDA indexes with `MILIMO_TORCH_CUDA_INDEXES` (comma-separated URLs).
 - On Windows CUDA without Triton, Flux text encoder defaults to a non-FP8 compatible model (`Qwen/Qwen3-8B`) on CPU.
+- In Lite low-VRAM mode, Flux text encoder is pinned to CPU by default to prevent CUDA OOM during model load.
 - Override behavior with `MILIMO_QWEN3_CUDA_NO_TRITON_PATH` and `MILIMO_QWEN3_CUDA_NO_TRITON_DEVICE`.
+- Advanced override: `MILIMO_QWEN3_TEXT_ENCODER_DEVICE` (`cpu` or `cuda`).
 - Backend launch sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` by default to reduce allocator fragmentation.
 - Adaptive low-VRAM limits are enabled by default: requests can exceed the defaults up to hard safety ceilings.
 - Set `MILIMO_LOWVRAM_STRICT_CAPS=1` to enforce strict default caps (legacy behavior).

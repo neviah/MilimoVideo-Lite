@@ -581,6 +581,12 @@ def patch_model_engine(backend_dir: Path) -> None:
 
     replace_text(
         file_path,
+        "        models_dir = os.path.join(ltx2_root, \"models\")\n",
+        "        models_dir = os.path.join(config.BACKEND_DIR, \"models\")\n",
+    )
+
+    replace_text(
+        file_path,
         "        ckpt_full = os.path.join(models_dir, \"checkpoints\", \"ltx-2-19b-distilled.safetensors\")\n",
         "        ckpt_full = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled.safetensors\")\n",
     )
@@ -657,6 +663,17 @@ def patch_storyboard_routes(backend_dir: Path) -> None:
     if not file_path.exists():
         return
 
+    replace_text(
+        file_path,
+        "    ckpt_full = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled.safetensors\")\n",
+        "    ckpt_full = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled.safetensors\")\n",
+    )
+    replace_text(
+        file_path,
+        "    ckpt_fp8 = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled-fp8.safetensors\")\n",
+        "    ckpt_fp8 = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled-fp8.safetensors\")\n",
+    )
+
     ai_parse_replacement = (
         "@router.post(\"/projects/{project_id}/storyboard/ai-parse\")\n"
         "async def ai_parse(project_id: str, req: ScriptParseRequest):\n"
@@ -668,8 +685,8 @@ def patch_storyboard_routes(backend_dir: Path) -> None:
         "    from managers.element_manager import element_manager\n"
         "    project_elements = element_manager.get_elements(project_id)\n"
         "\n"
-        "    ckpt_full = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled.safetensors\")\n"
-        "    ckpt_fp8 = os.path.join(config.LTX_DIR, \"models\", \"checkpoints\", \"ltx-2-19b-distilled-fp8.safetensors\")\n"
+        "    ckpt_full = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled.safetensors\")\n"
+        "    ckpt_fp8 = os.path.join(config.BACKEND_DIR, \"models\", \"ltx2\", \"ltx-2-19b-distilled-fp8.safetensors\")\n"
         "    if not (os.path.exists(ckpt_full) or os.path.exists(ckpt_fp8)):\n"
         "        logger.info(\"AI parse unavailable in Lite mode (missing full LTX checkpoint). Using fallback parser.\")\n"
         "        parsed_scenes = script_parser.parse_script(\n"
